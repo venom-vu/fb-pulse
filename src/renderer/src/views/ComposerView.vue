@@ -173,14 +173,8 @@
           </div>
         </div>
 
-        <!-- Scaffold for Story 3.2: Media Dropzone -->
-        <div class="p-3.5 rounded-lg border border-dashed border-[#1E293B] bg-[#0B111A]/40 flex items-center justify-between text-xs text-[#64748B]">
-          <div class="flex items-center space-x-2">
-            <span>🖼️</span>
-            <span>Đính kèm hình ảnh (Tối đa 4 ảnh, tối đa 10MB/ảnh)</span>
-          </div>
-          <span class="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-[#131B26] border border-[#1E293B]">Story 3.2</span>
-        </div>
+        <!-- Media Dropzone (Story 3.2) -->
+        <MediaDropzone />
       </div>
 
       <!-- Right Panel: Live Preview & Variant Inspector -->
@@ -248,6 +242,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useAccountStore } from '../stores/account'
 import { useComposerStore } from '../stores/composer'
+import MediaDropzone from '../components/composer/MediaDropzone.vue'
 
 const accountStore = useAccountStore()
 const composerStore = useComposerStore()

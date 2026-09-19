@@ -19,6 +19,9 @@
 
     <!-- Global Security Alert Modal (Emergency Pause) -->
     <SecurityAlertModal />
+
+    <!-- Global Toast Container -->
+    <ToastContainer />
   </div>
 </template>
 
@@ -31,6 +34,7 @@ import QueueView from './views/QueueView.vue'
 import TargetsView from './views/TargetsView.vue'
 import SettingsView from './views/SettingsView.vue'
 import SecurityAlertModal from './components/common/SecurityAlertModal.vue'
+import ToastContainer from './components/common/ToastContainer.vue'
 import { useNavigationStore } from './stores/navigation'
 import { useAccountStore } from './stores/account'
 import { useQueueStore } from './stores/queue'
