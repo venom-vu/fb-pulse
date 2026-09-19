@@ -2,6 +2,15 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { TargetDTO, FolderDTO } from '../../../preload/types'
 
+export function normalizeVietnamese(str: string): string {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+}
+
 export const useTargetsStore = defineStore('targets', () => {
   const targets = ref<TargetDTO[]>([])
   const folders = ref<FolderDTO[]>([])
@@ -43,17 +52,27 @@ export const useTargetsStore = defineStore('targets', () => {
       result = result.filter((t) => t.folder_id === selectedFolderId.value)
     }
 
-    // Lọc theo từ khóa tìm kiếm (đáp ứng NFR < 100ms)
+    // Lọc theo từ khóa tìm kiếm (chuẩn hóa không dấu, phản hồi tức thì < 100ms)
     const query = searchQuery.value.trim().toLowerCase()
     if (query) {
-      result = result.filter(
-        (t) =>
-          t.name.toLowerCase().includes(query) ||
-          t.fb_id.toLowerCase().includes(query)
-      )
+      const normalizedQuery = normalizeVietnamese(query)
+      result = result.filter((t) => {
+        const nameLower = t.name.toLowerCase()
+        const normalizedName = normalizeVietnamese(t.name)
+        const fbId = t.fb_id.toLowerCase()
+        return (
+          nameLower.includes(query) ||
+          normalizedName.includes(normalizedQuery) ||
+          fbId.includes(query)
+        )
+      })
     }
 
     return result
+  })
+
+  const currentFolderGroups = computed(() => {
+    return filteredTargets.value.filter((t) => t.type === 'group')
   })
 
   async function fetchTargets(): Promise<void> {
@@ -220,6 +239,7 @@ export const useTargetsStore = defineStore('targets', () => {
     unassignedCount,
     folderCounts,
     filteredTargets,
+    currentFolderGroups,
     fetchTargets,
     fetchFolders,
     syncTargets,

@@ -485,6 +485,160 @@ describe('Pinia Stores & Navigation Matrix Verification', () => {
     expect(targetsStore.targets[0].folder_id).toBeNull()
     expect(targetsStore.selectedFolderId).toBeNull()
   })
+
+  it('Targets Store (Story 2.3): diacritics normalization & instant search under 100ms', async () => {
+    const { normalizeVietnamese } = await import('../src/renderer/src/stores/targets')
+    expect(normalizeVietnamese('Nhóm Rao Vặt Hà Nội')).toBe('nhom rao vat ha noi')
+    expect(normalizeVietnamese('Cộng Đồng Công Nghệ & Đồ Gia Dụng')).toBe('cong dong cong nghe & do gia dung')
+
+    const targetsStore = useTargetsStore()
+    // Chuẩn bị 200 mock targets để test hiệu năng tìm kiếm tức thì < 100ms
+    const mockTargets = [
+      {
+        id: 't_prof',
+        account_id: 'primary_account',
+        folder_id: null,
+        fb_id: 'fb_profile_999',
+        name: 'Trang Cá Nhân Nguyễn Văn A',
+        type: 'profile' as const,
+        privacy: 'public' as const,
+        avatar_url: null,
+        last_synced_at: null
+      },
+      {
+        id: 't_g1',
+        account_id: 'primary_account',
+        folder_id: 'f_sales',
+        fb_id: 'fb_group_unique_101',
+        name: 'Nhóm Rao Vặt Bất Động Sản Hà Nội',
+        type: 'group' as const,
+        privacy: 'public' as const,
+        avatar_url: null,
+        last_synced_at: null
+      },
+      {
+        id: 't_g2',
+        account_id: 'primary_account',
+        folder_id: 'f_tech',
+        fb_id: 'fb_group_202',
+        name: 'Cộng Đồng Lập Trình Viên & Công Nghệ',
+        type: 'group' as const,
+        privacy: 'private' as const,
+        avatar_url: null,
+        last_synced_at: null
+      }
+    ]
+
+    for (let i = 3; i < 200; i++) {
+      mockTargets.push({
+        id: `t_g_${i}`,
+        account_id: 'primary_account',
+        folder_id: i % 2 === 0 ? 'f_sales' : 'f_tech',
+        fb_id: `fb_group_${1000 + i}`,
+        name: `Hội Trao Đổi Thông Tin Nhóm ${i}`,
+        type: 'group' as const,
+        privacy: 'public' as const,
+        avatar_url: null,
+        last_synced_at: null
+      })
+    }
+
+    targetsStore.targets = mockTargets
+
+    // 1. Tìm kiếm có dấu
+    const start1 = performance.now()
+    targetsStore.searchQuery = 'Bất Động Sản'
+    const res1 = targetsStore.filteredTargets
+    const duration1 = performance.now() - start1
+    expect(res1).toHaveLength(1)
+    expect(res1[0].id).toBe('t_g1')
+    expect(duration1).toBeLessThan(100) // Đảm bảo < 100ms
+
+    // 2. Tìm kiếm không dấu (diacritics insensitive)
+    const start2 = performance.now()
+    targetsStore.searchQuery = 'lap trinh vien & cong nghe'
+    const res2 = targetsStore.filteredTargets
+    const duration2 = performance.now() - start2
+    expect(res2).toHaveLength(1)
+    expect(res2[0].id).toBe('t_g2')
+    expect(duration2).toBeLessThan(100)
+
+    // 3. Tìm kiếm theo FB ID
+    targetsStore.searchQuery = 'fb_group_unique_101'
+    expect(targetsStore.filteredTargets).toHaveLength(1)
+    expect(targetsStore.filteredTargets[0].name).toBe('Nhóm Rao Vặt Bất Động Sản Hà Nội')
+
+    // 4. Xóa trắng tìm kiếm
+    targetsStore.searchQuery = ''
+    expect(targetsStore.filteredTargets).toHaveLength(200)
+  })
+
+  it('Targets Store (Story 2.3): currentFolderGroups filters correctly for select all in folder', () => {
+    const targetsStore = useTargetsStore()
+    targetsStore.targets = [
+      {
+        id: 't_prof',
+        account_id: 'primary_account',
+        folder_id: null,
+        fb_id: 'fb_profile_1',
+        name: 'Trang Cá Nhân',
+        type: 'profile',
+        privacy: 'public',
+        avatar_url: null,
+        last_synced_at: null
+      },
+      {
+        id: 't_g1',
+        account_id: 'primary_account',
+        folder_id: 'f_folder_a',
+        fb_id: 'fb_1',
+        name: 'Nhóm A1',
+        type: 'group',
+        privacy: 'public',
+        avatar_url: null,
+        last_synced_at: null
+      },
+      {
+        id: 't_g2',
+        account_id: 'primary_account',
+        folder_id: 'f_folder_a',
+        fb_id: 'fb_2',
+        name: 'Nhóm A2',
+        type: 'group',
+        privacy: 'public',
+        avatar_url: null,
+        last_synced_at: null
+      },
+      {
+        id: 't_g3',
+        account_id: 'primary_account',
+        folder_id: 'f_folder_b',
+        fb_id: 'fb_3',
+        name: 'Nhóm B1',
+        type: 'group',
+        privacy: 'private',
+        avatar_url: null,
+        last_synced_at: null
+      }
+    ]
+
+    // Khi chọn 'f_folder_a'
+    targetsStore.selectedFolderId = 'f_folder_a'
+    expect(targetsStore.currentFolderGroups).toHaveLength(2)
+    expect(targetsStore.currentFolderGroups.map((g) => g.id)).toEqual(['t_g1', 't_g2'])
+
+    // Khi chọn 'all' (selectedFolderId = null)
+    targetsStore.selectedFolderId = null
+    // profile không được tính vào currentFolderGroups
+    expect(targetsStore.currentFolderGroups).toHaveLength(3)
+    expect(targetsStore.currentFolderGroups.every((g) => g.type === 'group')).toBe(true)
+
+    // Khi tìm kiếm bên trong folder
+    targetsStore.selectedFolderId = 'f_folder_a'
+    targetsStore.searchQuery = 'A2'
+    expect(targetsStore.currentFolderGroups).toHaveLength(1)
+    expect(targetsStore.currentFolderGroups[0].id).toBe('t_g2')
+  })
 })
 
 
