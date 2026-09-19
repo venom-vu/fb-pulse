@@ -31,7 +31,15 @@ const api: FBPulseAPI = {
     resumeQueue: () => ipcRenderer.invoke('queue:resume'),
     cancelTask: (taskId) => ipcRenderer.invoke('queue:cancel-task', taskId),
     cancelCampaign: (campaignId) => ipcRenderer.invoke('queue:cancel-campaign', campaignId),
-    retryTask: (taskId) => ipcRenderer.invoke('queue:retry-task', taskId)
+    retryTask: (taskId) => ipcRenderer.invoke('queue:retry-task', taskId),
+    getWakeupStatus: () => ipcRenderer.invoke('queue:get-wakeup-status'),
+    getPowerSaveStatus: () => ipcRenderer.invoke('queue:get-power-save-status')
+  },
+  settings: {
+    getAll: () => ipcRenderer.invoke('settings:get-all'),
+    set: (key, value) => ipcRenderer.invoke('settings:set', key, value),
+    getPreventSleep: () => ipcRenderer.invoke('settings:get-prevent-sleep'),
+    setPreventSleep: (enabled) => ipcRenderer.invoke('settings:set-prevent-sleep', enabled)
   },
   composer: {
     testSpintaxVariant: (template: string) => ipcRenderer.invoke('composer:test-spintax', template),
@@ -74,6 +82,13 @@ const api: FBPulseAPI = {
     ipcRenderer.on('queue:task-updated', subscription)
     return () => {
       ipcRenderer.removeListener('queue:task-updated', subscription)
+    }
+  },
+  onWakeupRecovery: (callback: (payload: any) => void) => {
+    const subscription = (_event: IpcRendererEvent, payload: any): void => callback(payload)
+    ipcRenderer.on('queue:wakeup-recovery', subscription)
+    return () => {
+      ipcRenderer.removeListener('queue:wakeup-recovery', subscription)
     }
   }
 }

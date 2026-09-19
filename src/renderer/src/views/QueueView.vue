@@ -86,7 +86,69 @@
             <span class="text-[#94A3B8]">Tổng:</span>
             <strong class="text-[#F1F5F9] font-mono">{{ queueStore.totalCount }}</strong>
           </div>
+          <div
+            v-if="settingsStore.isPowerSaveBlocked"
+            id="badge-power-save-active"
+            class="px-3 py-1.5 rounded-lg bg-[#10B981]/15 border border-[#10B981]/40 flex items-center space-x-1.5"
+            title="Đang bật Electron powerSaveBlocker giữ máy luôn thức"
+          >
+            <span class="w-2 h-2 rounded-full bg-[#10B981] animate-pulse"></span>
+            <span class="text-[#10B981] font-semibold">Chống ngủ: Bật</span>
+          </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Wake-up Recovery Banner (Story 4.4) -->
+    <div
+      v-if="queueStore.isWakeupRecovering"
+      id="queue-wakeup-recovery-banner"
+      class="bg-[#131B26] border-2 border-[#3B82F6] rounded-xl p-5 shadow-[0_0_25px_rgba(59,130,246,0.25)] space-y-3 animate-fade-in"
+    >
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div
+            class="w-9 h-9 rounded-full bg-[#3B82F6]/20 border border-[#3B82F6]/50 text-[#3B82F6] flex items-center justify-center text-lg shrink-0 animate-pulse"
+          >
+            🔄
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#3B82F6] text-white">
+                Khôi Phục Sau Khi Máy Thức Dậy
+              </span>
+              <span class="text-xs text-[#94A3B8]">Bảo vệ an toàn tài khoản — Tránh bắn dồn dập</span>
+            </div>
+            <h3 class="text-sm font-bold text-[#F1F5F9] mt-0.5">
+              Phát hiện {{ queueStore.wakeupRecovery.overdueCount }} bài bị hoãn do máy ngủ — Bắt đầu phát hành an toàn sau {{ queueStore.wakeupRecovery.remainingSeconds }}s
+            </h3>
+          </div>
+        </div>
+
+        <div class="text-right">
+          <div class="text-[10px] text-[#94A3B8] uppercase tracking-wider font-semibold">Thời gian ổn định mạng</div>
+          <div id="queue-wakeup-countdown-timer" class="text-2xl font-black font-mono text-[#3B82F6] tracking-tight">
+            00:{{ String(queueStore.wakeupRecovery.remainingSeconds).padStart(2, '0') }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Progress bar -->
+      <div class="w-full bg-[#0B111A] h-2 rounded-full overflow-hidden border border-[#1E293B]">
+        <div
+          class="bg-gradient-to-r from-[#3B82F6] to-[#60A5FA] h-full transition-all duration-1000 ease-linear rounded-full"
+          :style="{
+            width: `${
+              queueStore.wakeupRecovery.totalSeconds > 0
+                ? Math.round(
+                    ((queueStore.wakeupRecovery.totalSeconds - queueStore.wakeupRecovery.remainingSeconds) /
+                      queueStore.wakeupRecovery.totalSeconds) *
+                      100
+                  )
+                : 0
+            }%`
+          }"
+        ></div>
       </div>
     </div>
 
@@ -416,9 +478,11 @@ import {
 } from 'lucide-vue-next'
 import { useAccountStore } from '../stores/account'
 import { useQueueStore } from '../stores/queue'
+import { useSettingsStore } from '../stores/settings'
 
 const accountStore = useAccountStore()
 const queueStore = useQueueStore()
+const settingsStore = useSettingsStore()
 const isRefreshing = ref(false)
 
 const filterTabs = [
@@ -440,7 +504,9 @@ async function refreshData(): Promise<void> {
   try {
     await queueStore.fetchQueueStatus()
     await queueStore.fetchJitterStatus()
+    await queueStore.fetchWakeupStatus()
     await queueStore.fetchTasks()
+    await settingsStore.fetchSettings()
   } finally {
     isRefreshing.value = false
   }

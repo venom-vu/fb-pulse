@@ -1,9 +1,10 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, powerMonitor } from 'electron'
 import { join } from 'path'
 import { registerIpcHandlers } from './ipc'
 import { closeDatabase, getDatabase } from './database/connection'
 import { sessionService } from './services/session.service'
 import { trayService } from './services/tray.service'
+import { schedulerService } from './services/scheduler.service'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -79,6 +80,15 @@ if (!gotTheLock) {
     // Khởi động tiến trình giám sát sức khỏe phiên nền (mỗi 5 phút)
     sessionService.startHealthMonitoring(300000, () => mainWindow)
 
+    // Lắng nghe sự kiện hệ điều hành đánh thức máy tính (Story 4.4)
+    powerMonitor.on('resume', () => {
+      console.log('[Main] Hệ điều hành kích hoạt powerMonitor.resume — Khởi động khôi phục an toàn')
+      schedulerService.handleSystemResume()
+    })
+
+    // Cập nhật trạng thái PowerSaveBlocker khi khởi động
+    schedulerService.updatePowerSaveBlocker()
+
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createWindow()
@@ -95,6 +105,7 @@ if (!gotTheLock) {
   app.on('before-quit', () => {
     trayService.destroy()
     sessionService.stopHealthMonitoring()
+    schedulerService.resetForTesting()
     closeDatabase()
   })
 }

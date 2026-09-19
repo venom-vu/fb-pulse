@@ -127,19 +127,69 @@
           <span class="text-xs font-mono font-medium text-[#F1F5F9] px-2 py-1 rounded bg-[#0B111A] border border-[#1E293B]">30 bài</span>
         </div>
       </div>
+
+      <!-- Setting Group 4: Power Management (Story 4.4) -->
+      <div class="bg-[#131B26] border border-[#1E293B] rounded-xl p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-semibold text-[#F1F5F9] uppercase tracking-wider">
+            Kiểm Soát Nguồn Điện & Chống Ngủ
+          </h3>
+          <span
+            v-if="settingsStore.isPowerSaveBlocked"
+            class="text-[10px] font-semibold px-2 py-0.5 rounded bg-[#10B981]/20 text-[#10B981] flex items-center space-x-1"
+          >
+            <span class="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse"></span>
+            <span>Đang giữ máy thức</span>
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between py-2 border-t border-[#1E293B]/60">
+          <div class="max-w-md">
+            <span class="text-xs font-medium text-[#F1F5F9]">
+              Ngăn máy tính đi ngủ khi có chiến dịch đang chạy
+            </span>
+            <p class="text-[11px] text-[#64748B] mt-0.5">
+              Sử dụng Electron powerSaveBlocker để giữ máy tính luôn thức chừng nào hàng đợi còn bài đăng active, ngăn gián đoạn chiến dịch. Tự động giải phóng khi hàng đợi hoàn tất.
+            </p>
+          </div>
+          <button
+            id="toggle-prevent-sleep"
+            type="button"
+            class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+            :class="settingsStore.preventSleepWhenActive ? 'bg-[#10B981]' : 'bg-[#1E293B]'"
+            :disabled="settingsStore.isLoading"
+            @click="handleTogglePreventSleep"
+          >
+            <span
+              class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+              :class="settingsStore.preventSleepWhenActive ? 'translate-x-5' : 'translate-x-0'"
+            />
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useAccountStore } from '../stores/account'
+import { useSettingsStore } from '../stores/settings'
 
 const accountStore = useAccountStore()
+const settingsStore = useSettingsStore()
 const sessionJsonInput = ref('')
 const isSubmitting = ref(false)
 const importMessage = ref('')
 const importSuccess = ref(false)
+
+onMounted(async () => {
+  await settingsStore.fetchSettings()
+})
+
+async function handleTogglePreventSleep(): Promise<void> {
+  await settingsStore.togglePreventSleep()
+}
 
 async function handleImportSession(): Promise<void> {
   if (!sessionJsonInput.value.trim()) return

@@ -1,6 +1,7 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, powerSaveBlocker } from 'electron'
 import { getDatabase } from '../database/connection'
-import type { QueueTickDTO, TaskDTO, QueueFilterDTO } from '../../preload/types'
+import { settingsService } from './settings.service'
+import type { QueueTickDTO, TaskDTO, QueueFilterDTO, WakeupRecoveryDTO } from '../../preload/types'
 
 export class SchedulerService {
   private status: 'idle' | 'jitter_waiting' | 'running' | 'paused' = 'idle'
@@ -15,6 +16,16 @@ export class SchedulerService {
   private currentTaskId: string | null = null
   private isProcessing = false
   private taskExecutor: ((task: any) => Promise<{ success: boolean; permalink?: string; error?: string }>) | null = null
+
+  // Wake-up Recovery & Power Management (Story 4.4)
+  private wakeupRecovery: WakeupRecoveryDTO = {
+    isRecovering: false,
+    overdueCount: 0,
+    remainingSeconds: 0,
+    totalSeconds: 0
+  }
+  private wakeupInterval: NodeJS.Timeout | null = null
+  private powerSaveBlockerId: number | null = null
 
   /**
    * Thiết lập BrowserWindow để phát broadcast sự kiện tick và task-updated
@@ -123,9 +134,15 @@ export class SchedulerService {
    * Tạm dừng hàng đợi (Safe Pause)
    * - Nếu đang jitter_waiting: dừng interval, lưu remainingSeconds, chuyển sang paused
    * - Nếu đang running: đánh dấu isPausing = true để hoàn tất tác vụ hiện tại rồi mới dừng
+   * - Nếu đang trong 60s cooldown của Wake-up Recovery: tạm dừng đếm ngược
    * - Nếu đang idle: chuyển sang paused
    */
   pauseQueue(): void {
+    if (this.wakeupRecovery.isRecovering && this.wakeupInterval) {
+      clearInterval(this.wakeupInterval)
+      this.wakeupInterval = null
+    }
+
     if (this.status === 'jitter_waiting') {
       if (this.tickInterval) {
         clearInterval(this.tickInterval)
@@ -140,17 +157,32 @@ export class SchedulerService {
       this.status = 'paused'
       this.broadcastTick()
     }
+
+    this.updatePowerSaveBlocker()
   }
 
   /**
    * Tiếp tục hàng đợi (Resume)
    * - Nếu trước đó tạm dừng khi Jitter và còn remainingSeconds: tiếp tục đếm ngược
+   * - Nếu trước đó tạm dừng trong 60s cooldown của Wake-up Recovery: tiếp tục đếm cooldown
    * - Nếu không: chuyển sang idle và bốc tác vụ kế tiếp theo FIFO
    */
   resumeQueue(): void {
     this.isPausing = false
     if (this.status === 'paused') {
-      if (this.remainingSeconds > 0) {
+      if (this.wakeupRecovery.isRecovering && this.wakeupRecovery.remainingSeconds > 0) {
+        this.status = 'idle'
+        this.broadcastTick()
+        this.wakeupInterval = setInterval(() => {
+          this.wakeupRecovery.remainingSeconds--
+          this.broadcastWakeupRecovery()
+
+          if (this.wakeupRecovery.remainingSeconds <= 0) {
+            this.stopWakeupRecovery()
+            this.triggerQueueLoop()
+          }
+        }, 1000)
+      } else if (this.remainingSeconds > 0) {
         this.status = 'jitter_waiting'
         this.broadcastTick()
         this.tickInterval = setInterval(() => {
@@ -172,6 +204,8 @@ export class SchedulerService {
         this.triggerQueueLoop()
       }
     }
+
+    this.updatePowerSaveBlocker()
   }
 
   /**
@@ -249,6 +283,8 @@ export class SchedulerService {
       this.broadcastTaskUpdated(updated)
     }
 
+    this.updatePowerSaveBlocker()
+
     if (this.status === 'idle') {
       this.triggerQueueLoop()
     }
@@ -320,7 +356,13 @@ export class SchedulerService {
    * Kích hoạt vòng lặp xử lý hàng đợi đơn luồng FIFO
    */
   triggerQueueLoop(): void {
-    if (this.status === 'paused' || this.isPausing || this.isProcessing || this.status === 'jitter_waiting') {
+    if (
+      this.status === 'paused' ||
+      this.isPausing ||
+      this.isProcessing ||
+      this.status === 'jitter_waiting' ||
+      this.wakeupRecovery.isRecovering
+    ) {
       return
     }
     this.processNextTask()
@@ -330,7 +372,13 @@ export class SchedulerService {
    * Xử lý tác vụ tiếp theo trong hàng đợi theo thứ tự FIFO
    */
   async processNextTask(): Promise<void> {
-    if (this.status === 'paused' || this.isPausing || this.isProcessing || this.status === 'jitter_waiting') {
+    if (
+      this.status === 'paused' ||
+      this.isPausing ||
+      this.isProcessing ||
+      this.status === 'jitter_waiting' ||
+      this.wakeupRecovery.isRecovering
+    ) {
       return
     }
 
@@ -424,8 +472,19 @@ export class SchedulerService {
       .get() as { count: number } | undefined
 
     if (remainingCountRow && remainingCountRow.count > 0) {
-      const minJitter = nextTask.min_jitter_sec || 180
-      const maxJitter = nextTask.max_jitter_sec || 300
+      // Kiểm tra xem có tác vụ quá hạn cần áp dụng dải Jitter an toàn (3–7 phút = 180s–420s) không
+      const overdueRow = db
+        .prepare(`
+          SELECT COUNT(*) as count
+          FROM scheduled_tasks
+          WHERE status = 'scheduled'
+            AND datetime(scheduled_at) <= datetime('now')
+        `)
+        .get() as { count: number } | undefined
+
+      const hasOverdue = (overdueRow?.count || 0) > 0
+      const minJitter = hasOverdue ? Math.max(180, nextTask.min_jitter_sec || 180) : nextTask.min_jitter_sec || 180
+      const maxJitter = hasOverdue ? Math.max(420, nextTask.max_jitter_sec || 300) : nextTask.max_jitter_sec || 300
       const jitterSec = this.calculateJitter(minJitter, maxJitter)
 
       this.startJitter(jitterSec, () => {
@@ -435,6 +494,8 @@ export class SchedulerService {
       this.status = 'idle'
       this.broadcastTick()
     }
+
+    this.updatePowerSaveBlocker()
   }
 
   /**
@@ -442,6 +503,7 @@ export class SchedulerService {
    */
   resetForTesting(): void {
     this.stopJitter()
+    this.stopWakeupRecovery()
     this.status = 'idle'
     this.remainingSeconds = 0
     this.totalSeconds = 0
@@ -450,6 +512,151 @@ export class SchedulerService {
     this.isProcessing = false
     this.taskExecutor = null
     this.onCompleteCallback = null
+
+    if (this.powerSaveBlockerId !== null) {
+      try {
+        if (typeof powerSaveBlocker !== 'undefined' && powerSaveBlocker?.isStarted?.(this.powerSaveBlockerId)) {
+          powerSaveBlocker.stop(this.powerSaveBlockerId)
+        }
+      } catch {}
+      this.powerSaveBlockerId = null
+    }
+  }
+
+  /**
+   * Lấy trạng thái hiện tại của Wake-up Recovery
+   */
+  getWakeupStatus(): WakeupRecoveryDTO {
+    return { ...this.wakeupRecovery }
+  }
+
+  /**
+   * Xử lý sự kiện máy tính thức dậy từ OS (powerMonitor.on('resume'))
+   */
+  handleSystemResume(): void {
+    const db = getDatabase()
+    const overdueRow = db
+      .prepare(`
+        SELECT COUNT(*) as count
+        FROM scheduled_tasks
+        WHERE status = 'scheduled'
+          AND datetime(scheduled_at) <= datetime('now')
+      `)
+      .get() as { count: number } | undefined
+
+    const overdueCount = overdueRow?.count || 0
+    if (overdueCount > 0) {
+      // Dừng sạch sẽ timer Jitter cũ trước đó
+      this.stopJitter()
+
+      // Khởi tạo trạng thái 60s cooldown ổn định mạng
+      this.wakeupRecovery = {
+        isRecovering: true,
+        overdueCount,
+        remainingSeconds: 60,
+        totalSeconds: 60
+      }
+      this.broadcastWakeupRecovery()
+
+      if (this.wakeupInterval) {
+        clearInterval(this.wakeupInterval)
+        this.wakeupInterval = null
+      }
+
+      this.wakeupInterval = setInterval(() => {
+        this.wakeupRecovery.remainingSeconds--
+        this.broadcastWakeupRecovery()
+
+        if (this.wakeupRecovery.remainingSeconds <= 0) {
+          this.stopWakeupRecovery()
+          // Sau khoảng nghỉ 60s, các bài trễ được đưa vào hàng đợi đăng bù tuần tự kèm Jitter an toàn
+          this.triggerQueueLoop()
+        }
+      }, 1000)
+    }
+
+    this.updatePowerSaveBlocker()
+  }
+
+  /**
+   * Dừng chế độ Wake-up Recovery
+   */
+  stopWakeupRecovery(): void {
+    if (this.wakeupInterval) {
+      clearInterval(this.wakeupInterval)
+      this.wakeupInterval = null
+    }
+    this.wakeupRecovery = {
+      isRecovering: false,
+      overdueCount: 0,
+      remainingSeconds: 0,
+      totalSeconds: 0
+    }
+    this.broadcastWakeupRecovery()
+  }
+
+  /**
+   * Cập nhật trạng thái Electron powerSaveBlocker dựa trên cài đặt và hàng đợi
+   */
+  updatePowerSaveBlocker(): void {
+    try {
+      if (typeof powerSaveBlocker === 'undefined' || !powerSaveBlocker) {
+        return
+      }
+
+      const isEnabled = settingsService.getPreventSleepWhenActive()
+      const db = getDatabase()
+      const activeTasksRow = db
+        .prepare(`
+          SELECT COUNT(*) as count
+          FROM scheduled_tasks
+          WHERE status IN ('scheduled', 'running', 'jitter_waiting')
+        `)
+        .get() as { count: number } | undefined
+
+      const hasActiveTasks = (activeTasksRow?.count || 0) > 0
+      const shouldBlock = isEnabled && hasActiveTasks && this.status !== 'paused'
+
+      if (shouldBlock) {
+        if (this.powerSaveBlockerId === null || !powerSaveBlocker.isStarted(this.powerSaveBlockerId)) {
+          this.powerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension')
+        }
+      } else {
+        if (this.powerSaveBlockerId !== null && powerSaveBlocker.isStarted(this.powerSaveBlockerId)) {
+          powerSaveBlocker.stop(this.powerSaveBlockerId)
+          this.powerSaveBlockerId = null
+        }
+      }
+    } catch (err) {
+      console.error('[SchedulerService] Lỗi khi cập nhật powerSaveBlocker:', err)
+    }
+  }
+
+  /**
+   * Lấy trạng thái hoạt động của PowerSaveBlocker
+   */
+  getPowerSaveStatus(): { isBlocked: boolean; isEnabled: boolean } {
+    let isBlocked = false
+    try {
+      if (typeof powerSaveBlocker !== 'undefined' && powerSaveBlocker && this.powerSaveBlockerId !== null) {
+        isBlocked = powerSaveBlocker.isStarted(this.powerSaveBlockerId)
+      }
+    } catch {}
+
+    return {
+      isBlocked,
+      isEnabled: settingsService.getPreventSleepWhenActive()
+    }
+  }
+
+  /**
+   * Phát broadcast sự kiện Wake-up Recovery tới Renderer Process qua IPC
+   */
+  private broadcastWakeupRecovery(): void {
+    const payload = this.getWakeupStatus()
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('queue:wakeup-recovery', payload)
+    }
   }
 
   /**

@@ -129,6 +129,18 @@ export interface DailyLimitCheckResultDTO {
   threshold: number
 }
 
+export interface WakeupRecoveryDTO {
+  isRecovering: boolean
+  overdueCount: number
+  remainingSeconds: number
+  totalSeconds: number
+}
+
+export interface AppSettingsDTO {
+  prevent_sleep_when_active?: string
+  [key: string]: string | undefined
+}
+
 export interface FBPulseAPI {
   account: {
     getProfile: () => Promise<IPCResult<AccountDTO | null>>
@@ -158,6 +170,14 @@ export interface FBPulseAPI {
     cancelTask: (taskId: string) => Promise<IPCResult<void>>
     cancelCampaign: (campaignId: string) => Promise<IPCResult<{ cancelledCount: number }>>
     retryTask: (taskId: string) => Promise<IPCResult<void>>
+    getWakeupStatus: () => Promise<IPCResult<WakeupRecoveryDTO>>
+    getPowerSaveStatus: () => Promise<IPCResult<{ isBlocked: boolean; isEnabled: boolean }>>
+  }
+  settings: {
+    getAll: () => Promise<IPCResult<Record<string, string>>>
+    set: (key: string, value: string) => Promise<IPCResult<void>>
+    getPreventSleep: () => Promise<IPCResult<boolean>>
+    setPreventSleep: (enabled: boolean) => Promise<IPCResult<void>>
   }
   composer: {
     testSpintaxVariant: (template: string) => Promise<IPCResult<string>>
@@ -178,6 +198,7 @@ export interface FBPulseAPI {
   onEmergencyPause: (callback: (payload: { reason: string; timestamp: string }) => void) => () => void
   onQueueTick: (callback: (payload: QueueTickDTO) => void) => () => void
   onTaskUpdated: (callback: (task: TaskDTO) => void) => () => void
+  onWakeupRecovery: (callback: (payload: WakeupRecoveryDTO) => void) => () => void
 }
 
 declare global {

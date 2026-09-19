@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { QueueTickDTO, TaskDTO, QueueFilterDTO } from '../../../preload/types'
+import type { QueueTickDTO, TaskDTO, QueueFilterDTO, WakeupRecoveryDTO } from '../../../preload/types'
 
 export const useQueueStore = defineStore('queue', () => {
   const isEmergencyPaused = ref<boolean>(false)
@@ -29,9 +29,18 @@ export const useQueueStore = defineStore('queue', () => {
   const isPausingQueue = ref<boolean>(false)
   const isResumingQueue = ref<boolean>(false)
 
+  // Wake-up Recovery State (Story 4.4)
+  const wakeupRecovery = ref<WakeupRecoveryDTO>({
+    isRecovering: false,
+    overdueCount: 0,
+    remainingSeconds: 0,
+    totalSeconds: 0
+  })
+
   const isJitterWaiting = computed(() => queueTick.value.status === 'jitter_waiting')
   const isQueuePaused = computed(() => queueTick.value.status === 'paused' || !!queueTick.value.isPausing)
   const isQueueRunning = computed(() => queueTick.value.status === 'running')
+  const isWakeupRecovering = computed(() => wakeupRecovery.value.isRecovering)
 
   const filteredTasks = computed(() => {
     if (filterStatus.value === 'all') return tasks.value
@@ -255,8 +264,31 @@ export const useQueueStore = defineStore('queue', () => {
       cleanups.push(cleanupTask)
     }
 
+    if (window.fbPulseAPI?.onWakeupRecovery) {
+      const cleanupWakeup = window.fbPulseAPI.onWakeupRecovery((payload) => {
+        wakeupRecovery.value = payload
+        if (!payload.isRecovering) {
+          fetchTasks()
+          fetchQueueStatus()
+        }
+      })
+      cleanups.push(cleanupWakeup)
+    }
+
     return () => {
       cleanups.forEach((c) => c())
+    }
+  }
+
+  async function fetchWakeupStatus(): Promise<void> {
+    if (!window.fbPulseAPI?.queue?.getWakeupStatus) return
+    try {
+      const res = await window.fbPulseAPI.queue.getWakeupStatus()
+      if (res.success && res.data) {
+        wakeupRecovery.value = res.data
+      }
+    } catch (err) {
+      console.error('[QueueStore] Lỗi khi lấy trạng thái khôi phục:', err)
     }
   }
 
@@ -278,9 +310,12 @@ export const useQueueStore = defineStore('queue', () => {
     isJitterWaiting,
     isQueuePaused,
     isQueueRunning,
+    isWakeupRecovering,
+    wakeupRecovery,
     filteredTasks,
     fetchQueueStatus,
     fetchJitterStatus,
+    fetchWakeupStatus,
     fetchTasks,
     pauseQueue,
     resumeQueue: resumeAuthPaused,

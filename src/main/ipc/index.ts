@@ -6,6 +6,7 @@ import { composerService } from '../services/composer.service'
 import { campaignService } from '../services/campaign.service'
 import { trayService } from '../services/tray.service'
 import { schedulerService } from '../services/scheduler.service'
+import { settingsService } from '../services/settings.service'
 import type {
   AccountDTO,
   IPCResult,
@@ -18,7 +19,8 @@ import type {
   QueueTickDTO,
   DailyLimitCheckResultDTO,
   TaskDTO,
-  QueueFilterDTO
+  QueueFilterDTO,
+  WakeupRecoveryDTO
 } from '../../preload/types'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
@@ -371,6 +373,114 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         error: {
           code: 'RETRY_TASK_FAILED',
           message: error?.message || 'Không thể thử lại tác vụ'
+        }
+      }
+    }
+  })
+
+  // Wake-up Recovery & Power Management Handlers (Story 4.4)
+  ipcMain.handle('queue:get-wakeup-status', async (): Promise<IPCResult<WakeupRecoveryDTO>> => {
+    try {
+      return {
+        success: true,
+        data: schedulerService.getWakeupStatus()
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: 'WAKEUP_STATUS_FAILED',
+          message: error?.message || 'Không thể lấy trạng thái khôi phục'
+        }
+      }
+    }
+  })
+
+  ipcMain.handle(
+    'queue:get-power-save-status',
+    async (): Promise<IPCResult<{ isBlocked: boolean; isEnabled: boolean }>> => {
+      try {
+        return {
+          success: true,
+          data: schedulerService.getPowerSaveStatus()
+        }
+      } catch (error: any) {
+        return {
+          success: false,
+          error: {
+            code: 'POWER_SAVE_STATUS_FAILED',
+            message: error?.message || 'Không thể lấy trạng thái nguồn điện'
+          }
+        }
+      }
+    }
+  )
+
+  // Settings Handlers (Story 4.4)
+  ipcMain.handle('settings:get-all', async (): Promise<IPCResult<Record<string, string>>> => {
+    try {
+      return {
+        success: true,
+        data: settingsService.getAllSettings()
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: 'GET_SETTINGS_FAILED',
+          message: error?.message || 'Không thể tải cấu hình cài đặt'
+        }
+      }
+    }
+  })
+
+  ipcMain.handle('settings:set', async (_event, key: string, value: string): Promise<IPCResult<void>> => {
+    try {
+      settingsService.setSetting(key, value)
+      return {
+        success: true
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: 'SET_SETTING_FAILED',
+          message: error?.message || 'Không thể lưu cấu hình cài đặt'
+        }
+      }
+    }
+  })
+
+  ipcMain.handle('settings:get-prevent-sleep', async (): Promise<IPCResult<boolean>> => {
+    try {
+      return {
+        success: true,
+        data: settingsService.getPreventSleepWhenActive()
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: 'GET_PREVENT_SLEEP_FAILED',
+          message: error?.message || 'Không thể lấy cài đặt chống ngủ'
+        }
+      }
+    }
+  })
+
+  ipcMain.handle('settings:set-prevent-sleep', async (_event, enabled: boolean): Promise<IPCResult<void>> => {
+    try {
+      settingsService.setPreventSleepWhenActive(enabled)
+      schedulerService.updatePowerSaveBlocker()
+      return {
+        success: true
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: 'SET_PREVENT_SLEEP_FAILED',
+          message: error?.message || 'Không thể lưu cài đặt chống ngủ'
         }
       }
     }
