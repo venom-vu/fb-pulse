@@ -16,7 +16,9 @@ import type {
   CreateCampaignDTO,
   CreateCampaignResultDTO,
   QueueTickDTO,
-  DailyLimitCheckResultDTO
+  DailyLimitCheckResultDTO,
+  TaskDTO,
+  QueueFilterDTO
 } from '../../preload/types'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
@@ -259,6 +261,116 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         error: {
           code: 'JITTER_STATUS_FAILED',
           message: error?.message || 'Không thể lấy trạng thái Jitter'
+        }
+      }
+    }
+  })
+
+  ipcMain.handle(
+    'queue:get-tasks',
+    async (_event, filter?: QueueFilterDTO): Promise<IPCResult<TaskDTO[]>> => {
+      try {
+        const tasks = schedulerService.getTasks(filter)
+        return {
+          success: true,
+          data: tasks
+        }
+      } catch (error: any) {
+        return {
+          success: false,
+          error: {
+            code: 'GET_TASKS_FAILED',
+            message: error?.message || 'Không thể lấy danh sách tác vụ'
+          }
+        }
+      }
+    }
+  )
+
+  ipcMain.handle('queue:pause', async (): Promise<IPCResult<void>> => {
+    try {
+      schedulerService.pauseQueue()
+      return {
+        success: true
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: 'PAUSE_FAILED',
+          message: error?.message || 'Không thể tạm dừng hàng đợi'
+        }
+      }
+    }
+  })
+
+  ipcMain.handle('queue:resume', async (): Promise<IPCResult<void>> => {
+    try {
+      schedulerService.resumeQueue()
+      return {
+        success: true
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: 'RESUME_FAILED',
+          message: error?.message || 'Không thể tiếp tục hàng đợi'
+        }
+      }
+    }
+  })
+
+  ipcMain.handle('queue:cancel-task', async (_event, taskId: string): Promise<IPCResult<void>> => {
+    try {
+      schedulerService.cancelTask(taskId)
+      return {
+        success: true
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: 'CANCEL_TASK_FAILED',
+          message: error?.message || 'Không thể hủy tác vụ'
+        }
+      }
+    }
+  })
+
+  ipcMain.handle(
+    'queue:cancel-campaign',
+    async (_event, campaignId: string): Promise<IPCResult<{ cancelledCount: number }>> => {
+      try {
+        const result = schedulerService.cancelCampaign(campaignId)
+        return {
+          success: true,
+          data: result
+        }
+      } catch (error: any) {
+        return {
+          success: false,
+          error: {
+            code: 'CANCEL_CAMPAIGN_FAILED',
+            message: error?.message || 'Không thể hủy chiến dịch'
+          }
+        }
+      }
+    }
+  )
+
+  ipcMain.handle('queue:retry-task', async (_event, taskId: string): Promise<IPCResult<void>> => {
+    try {
+      schedulerService.retryTask(taskId)
+      return {
+        success: true
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: 'RETRY_TASK_FAILED',
+          message: error?.message || 'Không thể thử lại tác vụ'
         }
       }
     }

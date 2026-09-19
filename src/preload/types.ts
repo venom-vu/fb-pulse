@@ -70,13 +70,55 @@ export interface CreateCampaignResultDTO {
   scheduledAt: string
 }
 
+export interface TaskDTO {
+  id: string
+  campaign_id: string
+  campaign_title?: string
+  account_id: string
+  target_id: string
+  target_name?: string
+  target_type?: 'profile' | 'group'
+  target_avatar_url?: string | null
+  resolved_spintax_text: string
+  media_paths: string[]
+  idempotency_key: string
+  status:
+    | 'scheduled'
+    | 'jitter_waiting'
+    | 'running'
+    | 'paused'
+    | 'success'
+    | 'admin_pending'
+    | 'retrying'
+    | 'failed'
+    | 'cancelled'
+    | 'auth_paused'
+  retry_count: number
+  scheduled_at: string
+  executed_at?: string | null
+  permalink?: string | null
+  error_code?: string | null
+  error_message?: string | null
+  screenshot_path?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface QueueFilterDTO {
+  status?: string
+  campaignId?: string
+  limit?: number
+  offset?: number
+}
+
 export interface QueueTickDTO {
   status: 'idle' | 'jitter_waiting' | 'running' | 'paused'
   remainingSeconds: number
   totalSeconds: number
   formattedCountdown: string
-  currentTaskId?: string
-  nextTaskId?: string
+  currentTaskId?: string | null
+  nextTaskId?: string | null
+  isPausing?: boolean
 }
 
 export interface DailyLimitCheckResultDTO {
@@ -110,6 +152,12 @@ export interface FBPulseAPI {
     resumeAuthPaused: () => Promise<IPCResult<{ resumedCount: number }>>
     getStatus: () => Promise<IPCResult<{ scheduledCount: number; authPausedCount: number; totalCount: number }>>
     getJitterStatus: () => Promise<IPCResult<QueueTickDTO>>
+    getTasks: (filter?: QueueFilterDTO) => Promise<IPCResult<TaskDTO[]>>
+    pauseQueue: () => Promise<IPCResult<void>>
+    resumeQueue: () => Promise<IPCResult<void>>
+    cancelTask: (taskId: string) => Promise<IPCResult<void>>
+    cancelCampaign: (campaignId: string) => Promise<IPCResult<{ cancelledCount: number }>>
+    retryTask: (taskId: string) => Promise<IPCResult<void>>
   }
   composer: {
     testSpintaxVariant: (template: string) => Promise<IPCResult<string>>
@@ -129,6 +177,7 @@ export interface FBPulseAPI {
   onSessionRefreshed: (callback: (account: AccountDTO) => void) => () => void
   onEmergencyPause: (callback: (payload: { reason: string; timestamp: string }) => void) => () => void
   onQueueTick: (callback: (payload: QueueTickDTO) => void) => () => void
+  onTaskUpdated: (callback: (task: TaskDTO) => void) => () => void
 }
 
 declare global {

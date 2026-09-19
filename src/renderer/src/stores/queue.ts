@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { QueueTickDTO } from '../../../preload/types'
+import type { QueueTickDTO, TaskDTO, QueueFilterDTO } from '../../../preload/types'
 
 export const useQueueStore = defineStore('queue', () => {
   const isEmergencyPaused = ref<boolean>(false)
@@ -12,15 +12,31 @@ export const useQueueStore = defineStore('queue', () => {
   const isResuming = ref<boolean>(false)
   const showSecurityModal = ref<boolean>(false)
 
-  // Anti-ban Jitter State (Story 4.2)
+  // Anti-ban Jitter State (Story 4.2 & 4.3)
   const queueTick = ref<QueueTickDTO>({
     status: 'idle',
     remainingSeconds: 0,
     totalSeconds: 0,
-    formattedCountdown: '00:00'
+    formattedCountdown: '00:00',
+    currentTaskId: null,
+    isPausing: false
   })
 
+  // Task List & Controls (Story 4.3)
+  const tasks = ref<TaskDTO[]>([])
+  const filterStatus = ref<string>('all')
+  const isLoadingTasks = ref<boolean>(false)
+  const isPausingQueue = ref<boolean>(false)
+  const isResumingQueue = ref<boolean>(false)
+
   const isJitterWaiting = computed(() => queueTick.value.status === 'jitter_waiting')
+  const isQueuePaused = computed(() => queueTick.value.status === 'paused' || !!queueTick.value.isPausing)
+  const isQueueRunning = computed(() => queueTick.value.status === 'running')
+
+  const filteredTasks = computed(() => {
+    if (filterStatus.value === 'all') return tasks.value
+    return tasks.value.filter((t) => t.status === filterStatus.value)
+  })
 
   async function fetchQueueStatus(): Promise<void> {
     if (!window.fbPulseAPI?.queue?.getStatus) return
@@ -53,7 +69,118 @@ export const useQueueStore = defineStore('queue', () => {
     }
   }
 
-  async function resumeQueue(): Promise<{ success: boolean; resumedCount?: number; error?: string }> {
+  async function fetchTasks(filter?: QueueFilterDTO): Promise<void> {
+    if (!window.fbPulseAPI?.queue?.getTasks) return
+    isLoadingTasks.value = true
+    try {
+      const res = await window.fbPulseAPI.queue.getTasks(filter)
+      if (res.success && res.data) {
+        tasks.value = res.data
+      }
+    } catch (err) {
+      console.error('[QueueStore] Lỗi khi lấy danh sách tác vụ:', err)
+    } finally {
+      isLoadingTasks.value = false
+    }
+  }
+
+  async function pauseQueue(): Promise<{ success: boolean; error?: string }> {
+    if (!window.fbPulseAPI?.queue?.pauseQueue) {
+      return { success: false, error: 'API không khả dụng' }
+    }
+    isPausingQueue.value = true
+    try {
+      const res = await window.fbPulseAPI.queue.pauseQueue()
+      if (res.success) {
+        await fetchJitterStatus()
+        return { success: true }
+      }
+      return { success: false, error: res.error?.message || 'Không thể tạm dừng hàng đợi' }
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Lỗi khi gọi tạm dừng hàng đợi' }
+    } finally {
+      isPausingQueue.value = false
+    }
+  }
+
+  async function resumeGeneralQueue(): Promise<{ success: boolean; error?: string }> {
+    if (!window.fbPulseAPI?.queue?.resumeQueue) {
+      return { success: false, error: 'API không khả dụng' }
+    }
+    isResumingQueue.value = true
+    try {
+      const res = await window.fbPulseAPI.queue.resumeQueue()
+      if (res.success) {
+        await fetchJitterStatus()
+        await fetchTasks()
+        return { success: true }
+      }
+      return { success: false, error: res.error?.message || 'Không thể tiếp tục hàng đợi' }
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Lỗi khi gọi tiếp tục hàng đợi' }
+    } finally {
+      isResumingQueue.value = false
+    }
+  }
+
+  async function cancelTask(taskId: string): Promise<{ success: boolean; error?: string }> {
+    if (!window.fbPulseAPI?.queue?.cancelTask) {
+      return { success: false, error: 'API không khả dụng' }
+    }
+    try {
+      const res = await window.fbPulseAPI.queue.cancelTask(taskId)
+      if (res.success) {
+        const idx = tasks.value.findIndex((t) => t.id === taskId)
+        if (idx !== -1) {
+          tasks.value[idx].status = 'cancelled'
+        }
+        await fetchQueueStatus()
+        return { success: true }
+      }
+      return { success: false, error: res.error?.message || 'Không thể hủy tác vụ' }
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Lỗi khi gọi hủy tác vụ' }
+    }
+  }
+
+  async function cancelCampaign(
+    campaignId: string
+  ): Promise<{ success: boolean; cancelledCount?: number; error?: string }> {
+    if (!window.fbPulseAPI?.queue?.cancelCampaign) {
+      return { success: false, error: 'API không khả dụng' }
+    }
+    try {
+      const res = await window.fbPulseAPI.queue.cancelCampaign(campaignId)
+      if (res.success && res.data) {
+        await fetchTasks()
+        await fetchQueueStatus()
+        return { success: true, cancelledCount: res.data.cancelledCount }
+      }
+      return { success: false, error: res.error?.message || 'Không thể hủy chiến dịch' }
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Lỗi khi gọi hủy chiến dịch' }
+    }
+  }
+
+  async function retryTask(taskId: string): Promise<{ success: boolean; error?: string }> {
+    if (!window.fbPulseAPI?.queue?.retryTask) {
+      return { success: false, error: 'API không khả dụng' }
+    }
+    try {
+      const res = await window.fbPulseAPI.queue.retryTask(taskId)
+      if (res.success) {
+        await fetchTasks()
+        await fetchQueueStatus()
+        return { success: true }
+      }
+      return { success: false, error: res.error?.message || 'Không thể thử lại tác vụ' }
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Lỗi khi gọi thử lại tác vụ' }
+    }
+  }
+
+  // Khôi phục hàng đợi sau lỗi xác thực / Checkpoint (Story 1.4)
+  async function resumeAuthPaused(): Promise<{ success: boolean; resumedCount?: number; error?: string }> {
     if (!window.fbPulseAPI?.queue?.resumeAuthPaused) {
       return { success: false, error: 'API không khả dụng' }
     }
@@ -64,6 +191,7 @@ export const useQueueStore = defineStore('queue', () => {
         isEmergencyPaused.value = false
         emergencyPauseReason.value = null
         await fetchQueueStatus()
+        await fetchTasks()
         return { success: true, resumedCount: res.data.resumedCount }
       }
       return {
@@ -86,6 +214,7 @@ export const useQueueStore = defineStore('queue', () => {
     emergencyPauseTimestamp.value = payload.timestamp
     showSecurityModal.value = true
     fetchQueueStatus()
+    fetchTasks()
   }
 
   function openSecurityModal(): void {
@@ -113,6 +242,19 @@ export const useQueueStore = defineStore('queue', () => {
       cleanups.push(cleanupTick)
     }
 
+    if (window.fbPulseAPI?.onTaskUpdated) {
+      const cleanupTask = window.fbPulseAPI.onTaskUpdated((task) => {
+        const index = tasks.value.findIndex((t) => t.id === task.id)
+        if (index !== -1) {
+          tasks.value[index] = task
+        } else {
+          tasks.value.unshift(task)
+        }
+        fetchQueueStatus()
+      })
+      cleanups.push(cleanupTask)
+    }
+
     return () => {
       cleanups.forEach((c) => c())
     }
@@ -128,10 +270,25 @@ export const useQueueStore = defineStore('queue', () => {
     isResuming,
     showSecurityModal,
     queueTick,
+    tasks,
+    filterStatus,
+    isLoadingTasks,
+    isPausingQueue,
+    isResumingQueue,
     isJitterWaiting,
+    isQueuePaused,
+    isQueueRunning,
+    filteredTasks,
     fetchQueueStatus,
     fetchJitterStatus,
-    resumeQueue,
+    fetchTasks,
+    pauseQueue,
+    resumeQueue: resumeAuthPaused,
+    resumeAuthPaused,
+    resumeGeneralQueue,
+    cancelTask,
+    cancelCampaign,
+    retryTask,
     handleEmergencyPauseEvent,
     openSecurityModal,
     closeSecurityModal,

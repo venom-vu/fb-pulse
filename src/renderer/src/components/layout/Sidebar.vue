@@ -30,7 +30,21 @@
         <div class="flex items-center justify-between">
           <span class="text-[11px] font-medium text-[#94A3B8]">Anti-ban Guard</span>
           <span
-            v-if="queueStore.isJitterWaiting"
+            v-if="queueStore.isQueuePaused"
+            id="sidebar-jitter-badge"
+            class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#F59E0B]/20 text-[#F59E0B]"
+          >
+            ⏸ Paused
+          </span>
+          <span
+            v-else-if="queueStore.isQueueRunning"
+            id="sidebar-jitter-badge"
+            class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#8B5CF6]/20 text-[#A78BFA] animate-pulse"
+          >
+            ⚡ Running
+          </span>
+          <span
+            v-else-if="queueStore.isJitterWaiting"
             id="sidebar-jitter-badge"
             class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#F59E0B]/20 text-[#F59E0B] animate-pulse"
           >
@@ -45,11 +59,11 @@
         </div>
 
         <div
-          v-if="queueStore.isJitterWaiting"
+          v-if="queueStore.isJitterWaiting || (queueStore.isQueuePaused && queueStore.queueTick.remainingSeconds > 0)"
           id="sidebar-jitter-countdown"
           class="flex items-center justify-between p-1.5 rounded bg-[#0B111A] border border-[#F59E0B]/30 text-[11px]"
         >
-          <span class="text-[#94A3B8]">Nghỉ an toàn:</span>
+          <span class="text-[#94A3B8]">{{ queueStore.isQueuePaused ? 'Nghỉ (Tạm dừng):' : 'Nghỉ an toàn:' }}</span>
           <span class="font-mono font-bold text-[#F59E0B] text-xs">
             {{ queueStore.queueTick.formattedCountdown }}
           </span>

@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron'
-import type { QueueTickDTO } from '../../preload/types'
+import { getDatabase } from '../database/connection'
+import type { QueueTickDTO, TaskDTO, QueueFilterDTO } from '../../preload/types'
 
 export class SchedulerService {
   private status: 'idle' | 'jitter_waiting' | 'running' | 'paused' = 'idle'
@@ -9,11 +10,26 @@ export class SchedulerService {
   private mainWindow: BrowserWindow | null = null
   private onCompleteCallback: (() => void) | null = null
 
+  // Single-threaded FIFO State Machine flags
+  private isPausing = false
+  private currentTaskId: string | null = null
+  private isProcessing = false
+  private taskExecutor: ((task: any) => Promise<{ success: boolean; permalink?: string; error?: string }>) | null = null
+
   /**
-   * Thiết lập BrowserWindow để phát broadcast sự kiện tick
+   * Thiết lập BrowserWindow để phát broadcast sự kiện tick và task-updated
    */
   setMainWindow(window: BrowserWindow | null): void {
     this.mainWindow = window
+  }
+
+  /**
+   * Đăng ký hàm thực thi tác vụ (dùng cho Playwright Worker ở Epic 5 hoặc Mock trong Unit Tests)
+   */
+  setTaskExecutor(
+    executor: ((task: any) => Promise<{ success: boolean; permalink?: string; error?: string }>) | null
+  ): void {
+    this.taskExecutor = executor
   }
 
   /**
@@ -37,14 +53,16 @@ export class SchedulerService {
   }
 
   /**
-   * Lấy trạng thái hiện tại của bộ đếm Jitter
+   * Lấy trạng thái hiện tại của bộ đếm Jitter và hàng đợi
    */
   getJitterStatus(): QueueTickDTO {
     return {
       status: this.status,
       remainingSeconds: this.remainingSeconds,
       totalSeconds: this.totalSeconds,
-      formattedCountdown: this.formatCountdown(this.remainingSeconds)
+      formattedCountdown: this.formatCountdown(this.remainingSeconds),
+      currentTaskId: this.currentTaskId,
+      isPausing: this.isPausing
     }
   }
 
@@ -102,20 +120,37 @@ export class SchedulerService {
   }
 
   /**
-   * Tạm dừng hoặc tiếp tục
+   * Tạm dừng hàng đợi (Safe Pause)
+   * - Nếu đang jitter_waiting: dừng interval, lưu remainingSeconds, chuyển sang paused
+   * - Nếu đang running: đánh dấu isPausing = true để hoàn tất tác vụ hiện tại rồi mới dừng
+   * - Nếu đang idle: chuyển sang paused
    */
-  setPaused(paused: boolean): void {
-    if (paused) {
-      if (this.status === 'jitter_waiting') {
-        if (this.tickInterval) {
-          clearInterval(this.tickInterval)
-          this.tickInterval = null
-        }
-        this.status = 'paused'
-        this.broadcastTick()
+  pauseQueue(): void {
+    if (this.status === 'jitter_waiting') {
+      if (this.tickInterval) {
+        clearInterval(this.tickInterval)
+        this.tickInterval = null
       }
+      this.status = 'paused'
+      this.broadcastTick()
+    } else if (this.status === 'running') {
+      this.isPausing = true
+      this.broadcastTick()
     } else {
-      if (this.status === 'paused' && this.remainingSeconds > 0) {
+      this.status = 'paused'
+      this.broadcastTick()
+    }
+  }
+
+  /**
+   * Tiếp tục hàng đợi (Resume)
+   * - Nếu trước đó tạm dừng khi Jitter và còn remainingSeconds: tiếp tục đếm ngược
+   * - Nếu không: chuyển sang idle và bốc tác vụ kế tiếp theo FIFO
+   */
+  resumeQueue(): void {
+    this.isPausing = false
+    if (this.status === 'paused') {
+      if (this.remainingSeconds > 0) {
         this.status = 'jitter_waiting'
         this.broadcastTick()
         this.tickInterval = setInterval(() => {
@@ -131,8 +166,290 @@ export class SchedulerService {
             }
           }
         }, 1000)
+      } else {
+        this.status = 'idle'
+        this.broadcastTick()
+        this.triggerQueueLoop()
       }
     }
+  }
+
+  /**
+   * Hủy một tác vụ cụ thể
+   */
+  cancelTask(taskId: string): void {
+    const db = getDatabase()
+    const task = db.prepare('SELECT * FROM scheduled_tasks WHERE id = ?').get(taskId) as any
+    if (!task) {
+      throw new Error('Không tìm thấy tác vụ')
+    }
+    if (task.status === 'running' && this.currentTaskId === taskId) {
+      throw new Error('Không thể hủy tác vụ đang trong tiến trình chạy')
+    }
+
+    if (['scheduled', 'paused', 'retrying', 'jitter_waiting'].includes(task.status)) {
+      db.prepare(`
+        UPDATE scheduled_tasks
+        SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(taskId)
+
+      const updated = this.getTaskById(taskId)
+      if (updated) {
+        this.broadcastTaskUpdated(updated)
+      }
+    }
+  }
+
+  /**
+   * Hủy toàn bộ tác vụ của một chiến dịch
+   */
+  cancelCampaign(campaignId: string): { cancelledCount: number } {
+    const db = getDatabase()
+    const stmt = db.prepare(`
+      UPDATE scheduled_tasks
+      SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+      WHERE campaign_id = ? AND status IN ('scheduled', 'paused', 'retrying')
+    `)
+    const result = stmt.run(campaignId)
+
+    const tasks = db
+      .prepare("SELECT * FROM scheduled_tasks WHERE campaign_id = ? AND status = 'cancelled'")
+      .all(campaignId) as any[]
+
+    for (const t of tasks) {
+      const full = this.getTaskById(t.id)
+      if (full) this.broadcastTaskUpdated(full)
+    }
+
+    return { cancelledCount: result.changes }
+  }
+
+  /**
+   * Thử lại một tác vụ bị thất bại
+   */
+  retryTask(taskId: string): void {
+    const db = getDatabase()
+    const task = db.prepare('SELECT * FROM scheduled_tasks WHERE id = ?').get(taskId) as any
+    if (!task) {
+      throw new Error('Không tìm thấy tác vụ')
+    }
+    if (task.status !== 'failed') {
+      throw new Error('Chỉ có thể thử lại các tác vụ thất bại')
+    }
+
+    db.prepare(`
+      UPDATE scheduled_tasks
+      SET status = 'scheduled', retry_count = retry_count + 1, error_code = NULL, error_message = NULL, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(taskId)
+
+    const updated = this.getTaskById(taskId)
+    if (updated) {
+      this.broadcastTaskUpdated(updated)
+    }
+
+    if (this.status === 'idle') {
+      this.triggerQueueLoop()
+    }
+  }
+
+  /**
+   * Lấy danh sách tác vụ theo bộ lọc
+   */
+  getTasks(filter?: QueueFilterDTO): TaskDTO[] {
+    const db = getDatabase()
+    let query = `
+      SELECT 
+        t.id, t.campaign_id, c.title as campaign_title,
+        t.account_id, t.target_id, tg.name as target_name, tg.type as target_type, tg.avatar_url as target_avatar_url,
+        t.resolved_spintax_text, t.media_paths, t.idempotency_key,
+        t.status, t.retry_count, t.scheduled_at, t.executed_at,
+        t.permalink, t.error_code, t.error_message, t.screenshot_path,
+        t.created_at, t.updated_at
+      FROM scheduled_tasks t
+      LEFT JOIN campaigns c ON t.campaign_id = c.id
+      LEFT JOIN targets tg ON t.target_id = tg.id
+      WHERE 1=1
+    `
+    const params: any[] = []
+
+    if (filter?.status && filter.status !== 'all') {
+      query += ` AND t.status = ?`
+      params.push(filter.status)
+    }
+
+    if (filter?.campaignId) {
+      query += ` AND t.campaign_id = ?`
+      params.push(filter.campaignId)
+    }
+
+    query += ` ORDER BY datetime(t.scheduled_at) ASC, datetime(t.created_at) ASC`
+
+    if (filter?.limit) {
+      query += ` LIMIT ?`
+      params.push(filter.limit)
+      if (filter?.offset) {
+        query += ` OFFSET ?`
+        params.push(filter.offset)
+      }
+    }
+
+    const rows = db.prepare(query).all(...params) as any[]
+    return rows.map((r) => ({
+      ...r,
+      media_paths: (() => {
+        try {
+          return JSON.parse(r.media_paths || '[]')
+        } catch {
+          return []
+        }
+      })()
+    }))
+  }
+
+  /**
+   * Lấy chi tiết một tác vụ theo ID
+   */
+  getTaskById(taskId: string): TaskDTO | null {
+    const list = this.getTasks()
+    return list.find((t) => t.id === taskId) || null
+  }
+
+  /**
+   * Kích hoạt vòng lặp xử lý hàng đợi đơn luồng FIFO
+   */
+  triggerQueueLoop(): void {
+    if (this.status === 'paused' || this.isPausing || this.isProcessing || this.status === 'jitter_waiting') {
+      return
+    }
+    this.processNextTask()
+  }
+
+  /**
+   * Xử lý tác vụ tiếp theo trong hàng đợi theo thứ tự FIFO
+   */
+  async processNextTask(): Promise<void> {
+    if (this.status === 'paused' || this.isPausing || this.isProcessing || this.status === 'jitter_waiting') {
+      return
+    }
+
+    const db = getDatabase()
+    const nextTask = db
+      .prepare(`
+        SELECT t.*, c.min_jitter_sec, c.max_jitter_sec
+        FROM scheduled_tasks t
+        LEFT JOIN campaigns c ON t.campaign_id = c.id
+        WHERE t.status = 'scheduled'
+          AND datetime(t.scheduled_at) <= datetime('now')
+        ORDER BY datetime(t.scheduled_at) ASC, datetime(t.created_at) ASC
+        LIMIT 1
+      `)
+      .get() as any
+
+    if (!nextTask) {
+      if (this.status === 'running') {
+        this.status = 'idle'
+        this.currentTaskId = null
+        this.broadcastTick()
+      }
+      return
+    }
+
+    this.isProcessing = true
+    this.status = 'running'
+    this.currentTaskId = nextTask.id
+    this.broadcastTick()
+
+    db.prepare(`
+      UPDATE scheduled_tasks
+      SET status = 'running', executed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(nextTask.id)
+
+    const runningTask = this.getTaskById(nextTask.id)
+    if (runningTask) {
+      this.broadcastTaskUpdated(runningTask)
+    }
+
+    let success = false
+    let permalink: string | undefined
+    let errorMessage: string | undefined
+
+    try {
+      if (this.taskExecutor) {
+        const res = await this.taskExecutor(nextTask)
+        success = res.success
+        permalink = res.permalink
+        errorMessage = res.error
+      } else {
+        // Mặc định cho giai đoạn Story 4.3 (khi chưa nối Playwright worker ở Epic 5)
+        success = true
+      }
+    } catch (err: any) {
+      success = false
+      errorMessage = err?.message || 'Lỗi thực thi tác vụ'
+    }
+
+    const finalStatus = success ? 'success' : 'failed'
+    db.prepare(`
+      UPDATE scheduled_tasks
+      SET status = ?, permalink = ?, error_message = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(finalStatus, permalink || null, errorMessage || null, nextTask.id)
+
+    const completedTask = this.getTaskById(nextTask.id)
+    if (completedTask) {
+      this.broadcastTaskUpdated(completedTask)
+    }
+
+    this.currentTaskId = null
+    this.isProcessing = false
+
+    // Kiểm tra cờ isPausing (nếu người dùng bấm tạm dừng trong lúc tác vụ đang chạy)
+    if (this.isPausing) {
+      this.isPausing = false
+      this.status = 'paused'
+      this.broadcastTick()
+      return
+    }
+
+    // Kiểm tra xem còn tác vụ scheduled nào không
+    const remainingCountRow = db
+      .prepare(`
+        SELECT COUNT(*) as count
+        FROM scheduled_tasks
+        WHERE status = 'scheduled'
+      `)
+      .get() as { count: number } | undefined
+
+    if (remainingCountRow && remainingCountRow.count > 0) {
+      const minJitter = nextTask.min_jitter_sec || 180
+      const maxJitter = nextTask.max_jitter_sec || 300
+      const jitterSec = this.calculateJitter(minJitter, maxJitter)
+
+      this.startJitter(jitterSec, () => {
+        this.triggerQueueLoop()
+      })
+    } else {
+      this.status = 'idle'
+      this.broadcastTick()
+    }
+  }
+
+  /**
+   * Reset trạng thái phục vụ cho unit testing
+   */
+  resetForTesting(): void {
+    this.stopJitter()
+    this.status = 'idle'
+    this.remainingSeconds = 0
+    this.totalSeconds = 0
+    this.isPausing = false
+    this.currentTaskId = null
+    this.isProcessing = false
+    this.taskExecutor = null
+    this.onCompleteCallback = null
   }
 
   /**
@@ -142,6 +459,15 @@ export class SchedulerService {
     const payload = this.getJitterStatus()
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send('queue:tick', payload)
+    }
+  }
+
+  /**
+   * Gửi sự kiện cập nhật tác vụ tới Renderer Process qua IPC
+   */
+  private broadcastTaskUpdated(task: TaskDTO): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('queue:task-updated', task)
     }
   }
 }

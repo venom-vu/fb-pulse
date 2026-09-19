@@ -25,7 +25,13 @@ const api: FBPulseAPI = {
   queue: {
     resumeAuthPaused: () => ipcRenderer.invoke('queue:resume-auth-paused'),
     getStatus: () => ipcRenderer.invoke('queue:get-status'),
-    getJitterStatus: () => ipcRenderer.invoke('queue:get-jitter-status')
+    getJitterStatus: () => ipcRenderer.invoke('queue:get-jitter-status'),
+    getTasks: (filter) => ipcRenderer.invoke('queue:get-tasks', filter),
+    pauseQueue: () => ipcRenderer.invoke('queue:pause'),
+    resumeQueue: () => ipcRenderer.invoke('queue:resume'),
+    cancelTask: (taskId) => ipcRenderer.invoke('queue:cancel-task', taskId),
+    cancelCampaign: (campaignId) => ipcRenderer.invoke('queue:cancel-campaign', campaignId),
+    retryTask: (taskId) => ipcRenderer.invoke('queue:retry-task', taskId)
   },
   composer: {
     testSpintaxVariant: (template: string) => ipcRenderer.invoke('composer:test-spintax', template),
@@ -61,6 +67,13 @@ const api: FBPulseAPI = {
     ipcRenderer.on('queue:tick', subscription)
     return () => {
       ipcRenderer.removeListener('queue:tick', subscription)
+    }
+  },
+  onTaskUpdated: (callback: (task: any) => void) => {
+    const subscription = (_event: IpcRendererEvent, task: any): void => callback(task)
+    ipcRenderer.on('queue:task-updated', subscription)
+    return () => {
+      ipcRenderer.removeListener('queue:task-updated', subscription)
     }
   }
 }
