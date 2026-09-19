@@ -103,17 +103,38 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   )
 
+  ipcMain.handle(
+    'account:import-session-json',
+    async (_event, jsonStr: string): Promise<IPCResult<AccountDTO>> => {
+      try {
+        const result = await sessionService.importSessionJson(jsonStr)
+        if (result.success && result.data) {
+          mainWindow.webContents.send('account:session-refreshed', result.data)
+        }
+        return result
+      } catch (error: any) {
+        console.error('[IPC] account:import-session-json error:', error)
+        return {
+          success: false,
+          error: {
+            code: 'IMPORT_ERROR',
+            message: error?.message || 'Không thể nhập phiên đăng nhập'
+          }
+        }
+      }
+    }
+  )
+
   ipcMain.handle('account:logout', async (): Promise<IPCResult<void>> => {
     try {
-      const db = getDatabase()
-      db.prepare('DELETE FROM accounts').run()
+      await sessionService.clearSession()
       return { success: true }
     } catch (error: any) {
       return {
         success: false,
         error: {
-          code: 'DB_ERROR',
-          message: error?.message || 'Failed to logout'
+          code: 'LOGOUT_ERROR',
+          message: error?.message || 'Lỗi khi đăng xuất tài khoản'
         }
       }
     }

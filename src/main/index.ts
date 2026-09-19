@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { registerIpcHandlers } from './ipc'
 import { closeDatabase, getDatabase } from './database/connection'
+import { sessionService } from './services/session.service'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -60,12 +61,13 @@ if (!gotTheLock) {
     }
   })
 
-  app.whenReady().then(() => {
-    // Initialize database
+  app.whenReady().then(async () => {
+    // Initialize database & restore session
     try {
       getDatabase()
+      await sessionService.restoreSessionFromDatabase()
     } catch (err) {
-      console.error('[Main] Failed to initialize SQLite database:', err)
+      console.error('[Main] Failed to initialize SQLite database or restore session:', err)
     }
 
     createWindow()

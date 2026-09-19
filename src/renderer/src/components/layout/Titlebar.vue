@@ -22,14 +22,30 @@
       <div class="titlebar-no-drag">
         <div
           v-if="account"
-          class="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-[#10B981]/15 border border-[#10B981]/40 text-[#10B981] text-[11px] transition-all"
+          class="flex items-center space-x-2 px-2.5 py-1 rounded-full bg-[#10B981]/15 border border-[#10B981]/40 text-[#10B981] text-[11px] transition-all group cursor-pointer"
+          title="Tài khoản đang kết nối. Nhấp để đăng xuất."
+          @click="handleLogout"
         >
+          <img
+            v-if="account.avatar_url"
+            :src="account.avatar_url"
+            alt="Avatar"
+            class="w-4 h-4 rounded-full object-cover border border-[#10B981]"
+          />
+          <span
+            v-else
+            class="w-4 h-4 rounded-full bg-[#10B981] text-[#042419] font-bold text-[9px] flex items-center justify-center"
+          >
+            {{ account.name?.charAt(0).toUpperCase() || 'F' }}
+          </span>
+
           <span class="relative flex h-2 w-2">
             <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#10B981] opacity-75"></span>
             <span class="relative inline-flex rounded-full h-2 w-2 bg-[#10B981]"></span>
           </span>
           <span class="font-medium max-w-[140px] truncate">Connected: {{ account.name }}</span>
           <span class="text-[9px] px-1 py-0.2 rounded bg-[#10B981]/20 font-bold uppercase">Active</span>
+          <span class="hidden group-hover:inline-block text-[9px] text-[#EF4444] font-medium ml-1">Đăng xuất</span>
         </div>
         <button
           v-else
@@ -117,5 +133,9 @@ function closeWindow(): void {
 
 async function connectFacebook(): Promise<void> {
   await accountStore.loginFacebook()
+}
+
+async function handleLogout(): Promise<void> {
+  await accountStore.logout()
 }
 </script>

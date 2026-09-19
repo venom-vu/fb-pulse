@@ -45,6 +45,49 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
+  async function importSessionJson(jsonStr: string): Promise<{ success: boolean; error?: string }> {
+    if (!window.fbPulseAPI?.account) {
+      return { success: false, error: 'API không khả dụng' }
+    }
+    isLoading.value = true
+    try {
+      const res = await window.fbPulseAPI.account.importSessionJson(jsonStr)
+      if (res.success && res.data) {
+        account.value = res.data
+        return { success: true }
+      }
+      return {
+        success: false,
+        error: res.error?.message || 'Không thể nhập Cookie JSON'
+      }
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err?.message || 'Lỗi không xác định khi nhập session'
+      }
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function logout(): Promise<boolean> {
+    if (!window.fbPulseAPI?.account) return false
+    isLoading.value = true
+    try {
+      const res = await window.fbPulseAPI.account.logout()
+      if (res.success) {
+        account.value = null
+        return true
+      }
+      return false
+    } catch (err) {
+      console.error('[AccountStore] Error logging out:', err)
+      return false
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   function initListeners(): () => void {
     if (!window.fbPulseAPI?.onSessionRefreshed) return () => {}
     return window.fbPulseAPI.onSessionRefreshed((updatedAccount) => {
@@ -58,6 +101,8 @@ export const useAccountStore = defineStore('account', () => {
     isLoggingIn,
     fetchProfile,
     loginFacebook,
+    importSessionJson,
+    logout,
     initListeners
   }
 })

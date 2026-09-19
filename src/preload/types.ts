@@ -31,6 +31,7 @@ export interface FBPulseAPI {
   account: {
     getProfile: () => Promise<IPCResult<AccountDTO | null>>
     loginWebView: () => Promise<IPCResult<{ success: boolean; cancelled?: boolean; userId?: string }>>
+    importSessionJson: (jsonStr: string) => Promise<IPCResult<AccountDTO>>
     logout: () => Promise<IPCResult<void>>
   }
   window: {

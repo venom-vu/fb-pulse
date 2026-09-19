@@ -128,4 +128,65 @@ describe('Pinia Stores & Navigation Matrix Verification', () => {
     expect(accountStore.account).not.toBeNull()
     expect(accountStore.account?.fb_user_id).toBe('100088192837162')
   })
+
+  it('Account Store (Story 1.3): handles importSessionJson successfully and updates store', async () => {
+    const accountStore = useAccountStore()
+
+    // @ts-ignore
+    global.window = {
+      fbPulseAPI: {
+        account: {
+          importSessionJson: async (json: string) => ({
+            success: true,
+            data: {
+              id: 'primary_account',
+              fb_user_id: '100099887766554',
+              name: 'Imported FB User',
+              avatar_url: null,
+              status: 'connected',
+              status_reason: null,
+              last_synced_at: new Date().toISOString()
+            }
+          })
+        }
+      }
+    }
+
+    const res = await accountStore.importSessionJson('mock_json')
+    expect(res.success).toBe(true)
+    expect(accountStore.account).not.toBeNull()
+    expect(accountStore.account?.fb_user_id).toBe('100099887766554')
+    expect(accountStore.account?.status).toBe('connected')
+    expect(accountStore.isLoading).toBe(false)
+  })
+
+  it('Account Store (Story 1.3): handles logout and clears account in store', async () => {
+    const accountStore = useAccountStore()
+
+    // Set an initial account
+    accountStore.account = {
+      id: 'primary_account',
+      fb_user_id: '100099887766554',
+      name: 'Imported FB User',
+      avatar_url: null,
+      status: 'connected',
+      status_reason: null,
+      last_synced_at: new Date().toISOString()
+    }
+
+    // @ts-ignore
+    global.window = {
+      fbPulseAPI: {
+        account: {
+          logout: async () => ({ success: true, data: undefined })
+        }
+      }
+    }
+
+    const success = await accountStore.logout()
+    expect(success).toBe(true)
+    expect(accountStore.account).toBeNull()
+    expect(accountStore.isLoading).toBe(false)
+  })
 })
+

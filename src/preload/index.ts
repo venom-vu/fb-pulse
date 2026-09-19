@@ -5,6 +5,7 @@ const api: FBPulseAPI = {
   account: {
     getProfile: () => ipcRenderer.invoke('account:get-profile'),
     loginWebView: () => ipcRenderer.invoke('account:login-webview'),
+    importSessionJson: (jsonStr: string) => ipcRenderer.invoke('account:import-session-json', jsonStr),
     logout: () => ipcRenderer.invoke('account:logout')
   },
   window: {
