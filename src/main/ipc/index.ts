@@ -3,7 +3,18 @@ import { getDatabase } from '../database/connection'
 import { sessionService } from '../services/session.service'
 import { targetService } from '../services/target.service'
 import { composerService } from '../services/composer.service'
-import type { AccountDTO, IPCResult, AppInfoDTO, TargetDTO, FolderDTO, TargetSyncResultDTO } from '../../preload/types'
+import { campaignService } from '../services/campaign.service'
+import { trayService } from '../services/tray.service'
+import type {
+  AccountDTO,
+  IPCResult,
+  AppInfoDTO,
+  TargetDTO,
+  FolderDTO,
+  TargetSyncResultDTO,
+  CreateCampaignDTO,
+  CreateCampaignResultDTO
+} from '../../preload/types'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // Window Control Handlers
@@ -25,6 +36,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle('window:is-maximized', () => {
     return mainWindow.isMaximized()
+  })
+
+  ipcMain.handle('window:minimize-to-tray', () => {
+    trayService.minimizeToTray()
   })
 
   // App Info Handler
@@ -396,6 +411,25 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
           error: {
             code: 'SPINTAX_ERROR',
             message: error?.message || 'Lỗi khi giải mã Spintax'
+          }
+        }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'composer:create-campaign',
+    async (_event, payload: CreateCampaignDTO): Promise<IPCResult<CreateCampaignResultDTO>> => {
+      try {
+        const result = campaignService.createCampaign(payload)
+        return { success: true, data: result }
+      } catch (error: any) {
+        console.error('[IPC] composer:create-campaign error:', error)
+        return {
+          success: false,
+          error: {
+            code: 'CREATE_CAMPAIGN_FAILED',
+            message: error?.message || 'Không thể tạo chiến dịch'
           }
         }
       }

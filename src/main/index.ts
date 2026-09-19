@@ -3,6 +3,7 @@ import { join } from 'path'
 import { registerIpcHandlers } from './ipc'
 import { closeDatabase, getDatabase } from './database/connection'
 import { sessionService } from './services/session.service'
+import { trayService } from './services/tray.service'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -39,6 +40,9 @@ function createWindow(): void {
 
   // Register IPC handlers
   registerIpcHandlers(mainWindow)
+
+  // Initialize System Tray
+  trayService.initialize(mainWindow)
 
   // Load renderer
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -89,6 +93,7 @@ if (!gotTheLock) {
   })
 
   app.on('before-quit', () => {
+    trayService.destroy()
     sessionService.stopHealthMonitoring()
     closeDatabase()
   })

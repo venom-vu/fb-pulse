@@ -52,6 +52,24 @@ export interface TargetSyncResultDTO {
   profileTarget?: TargetDTO
 }
 
+export interface CreateCampaignDTO {
+  title?: string
+  rawContent: string
+  spintaxEnabled?: boolean
+  mediaPaths?: string[]
+  targetIds: string[]
+  scheduleMode: 'immediate' | 'scheduled'
+  scheduledAt?: string // ISO 8601 string
+  minJitterSec?: number
+  maxJitterSec?: number
+}
+
+export interface CreateCampaignResultDTO {
+  campaignId: string
+  taskCount: number
+  scheduledAt: string
+}
+
 export interface FBPulseAPI {
   account: {
     getProfile: () => Promise<IPCResult<AccountDTO | null>>
@@ -77,12 +95,14 @@ export interface FBPulseAPI {
   }
   composer: {
     testSpintaxVariant: (template: string) => Promise<IPCResult<string>>
+    createCampaign: (payload: CreateCampaignDTO) => Promise<IPCResult<CreateCampaignResultDTO>>
   }
   window: {
     minimize: () => Promise<void>
     maximize: () => Promise<void>
     close: () => Promise<void>
     isMaximized: () => Promise<boolean>
+    minimizeToTray: () => Promise<void>
   }
   app: {
     getInfo: () => Promise<AppInfoDTO>

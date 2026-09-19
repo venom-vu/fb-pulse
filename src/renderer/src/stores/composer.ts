@@ -25,6 +25,11 @@ export const useComposerStore = defineStore('composer', () => {
   // Targets selection state (Story 3.3)
   const selectedTargetIds = ref<string[]>([])
 
+  // Schedule state (Story 4.1)
+  const scheduleMode = ref<'immediate' | 'scheduled'>('immediate')
+  const scheduledAt = ref<string>('')
+  const isSubmitting = ref(false)
+
   const isValid = computed(() => spintaxError.value === null)
   const hasMedia = computed(() => mediaFiles.value.length > 0)
   const coverPhoto = computed(() => (mediaFiles.value.length > 0 ? mediaFiles.value[0] : null))
@@ -287,6 +292,85 @@ export const useComposerStore = defineStore('composer', () => {
     return selectedTargetIds.value.includes(id)
   }
 
+  async function createCampaign(): Promise<{ success: boolean; error?: string }> {
+    if (!content.value.trim()) {
+      const msg = 'Vui lòng nhập nội dung bài viết'
+      toastStore.showToast(msg, 'warning')
+      return { success: false, error: msg }
+    }
+
+    if (spintaxError.value) {
+      const msg = 'Vui lòng hoàn thiện nội dung Spintax hợp lệ trước khi lên lịch'
+      toastStore.showToast(msg, 'warning')
+      return { success: false, error: msg }
+    }
+
+    if (selectedTargetIds.value.length === 0) {
+      const msg = 'Vui lòng chọn ít nhất 1 nhóm đích'
+      toastStore.showToast(msg, 'warning')
+      return { success: false, error: msg }
+    }
+
+    let isoScheduledAt: string | undefined = undefined
+    if (scheduleMode.value === 'scheduled') {
+      if (!scheduledAt.value) {
+        const msg = 'Vui lòng chọn thời gian hẹn giờ phát hành'
+        toastStore.showToast(msg, 'warning')
+        return { success: false, error: msg }
+      }
+      const scheduledTime = new Date(scheduledAt.value)
+      if (isNaN(scheduledTime.getTime()) || scheduledTime.getTime() <= Date.now()) {
+        const msg = 'Thời gian hẹn giờ phải ở tương lai'
+        toastStore.showToast(msg, 'warning')
+        return { success: false, error: msg }
+      }
+      isoScheduledAt = scheduledTime.toISOString()
+    }
+
+    isSubmitting.value = true
+
+    try {
+      if (window?.fbPulseAPI?.composer?.createCampaign) {
+        const res = await window.fbPulseAPI.composer.createCampaign({
+          rawContent: content.value,
+          spintaxEnabled: true,
+          mediaPaths: mediaFiles.value
+            .map((m) => m.path)
+            .filter((p): p is string => Boolean(p)),
+          targetIds: [...selectedTargetIds.value],
+          scheduleMode: scheduleMode.value,
+          scheduledAt: isoScheduledAt
+        })
+
+        if (res.success && res.data) {
+          toastStore.showToast(
+            `Đã lên lịch chiến dịch thành công (${res.data.taskCount} bài đăng)!`,
+            'success'
+          )
+          // Tự động thu gọn ứng dụng xuống System Tray
+          if (window?.fbPulseAPI?.window?.minimizeToTray) {
+            await window.fbPulseAPI.window.minimizeToTray()
+          }
+          return { success: true }
+        } else {
+          const errMsg = res.error?.message || 'Không thể tạo chiến dịch'
+          toastStore.showToast(errMsg, 'error')
+          return { success: false, error: errMsg }
+        }
+      } else {
+        // Fallback khi chạy không có bridge
+        toastStore.showToast('Đã lên lịch chiến dịch thành công (Mô phỏng)!', 'success')
+        return { success: true }
+      }
+    } catch (err: any) {
+      const errMsg = err?.message || 'Có lỗi xảy ra khi tạo chiến dịch'
+      toastStore.showToast(errMsg, 'error')
+      return { success: false, error: errMsg }
+    } finally {
+      isSubmitting.value = false
+    }
+  }
+
   return {
     content,
     currentVariant,
@@ -298,6 +382,9 @@ export const useComposerStore = defineStore('composer', () => {
     coverPhoto,
     selectedTargetIds,
     selectedTargetsCount,
+    scheduleMode,
+    scheduledAt,
+    isSubmitting,
     setContent,
     insertSpintaxPattern,
     testSpintaxVariant,
@@ -309,6 +396,7 @@ export const useComposerStore = defineStore('composer', () => {
     toggleTarget,
     selectAllTargets,
     clearSelectedTargets,
-    isTargetSelected
+    isTargetSelected,
+    createCampaign
   }
 })

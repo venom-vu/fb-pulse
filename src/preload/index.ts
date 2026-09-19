@@ -27,13 +27,15 @@ const api: FBPulseAPI = {
     getStatus: () => ipcRenderer.invoke('queue:get-status')
   },
   composer: {
-    testSpintaxVariant: (template: string) => ipcRenderer.invoke('composer:test-spintax', template)
+    testSpintaxVariant: (template: string) => ipcRenderer.invoke('composer:test-spintax', template),
+    createCampaign: (payload) => ipcRenderer.invoke('composer:create-campaign', payload)
   },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     maximize: () => ipcRenderer.invoke('window:maximize'),
     close: () => ipcRenderer.invoke('window:close'),
-    isMaximized: () => ipcRenderer.invoke('window:is-maximized')
+    isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
+    minimizeToTray: () => ipcRenderer.invoke('window:minimize-to-tray')
   },
   app: {
     getInfo: () => ipcRenderer.invoke('app:get-info')

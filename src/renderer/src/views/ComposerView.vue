@@ -175,6 +175,106 @@
 
         <!-- Media Dropzone (Story 3.2) -->
         <MediaDropzone />
+
+        <!-- Khung Điều Khiển Lên Lịch & Launch CTA (Story 4.1) -->
+        <div class="bg-[#131B26] border border-[#1E293B] rounded-xl p-4 space-y-4 shadow-sm">
+          <div class="flex items-center justify-between border-b border-[#1E293B]/60 pb-2.5">
+            <span class="text-xs font-semibold text-[#F1F5F9] uppercase tracking-wider">Thời Điểm Phát Hành</span>
+            <span class="text-[11px] text-[#10B981] font-mono font-medium">Tự động thu xuống Tray</span>
+          </div>
+
+          <!-- Schedule Options: Chạy ngay vs Hẹn giờ -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label
+              class="flex items-center space-x-2.5 p-2.5 rounded-lg border cursor-pointer transition-all text-xs select-none"
+              :class="[
+                composerStore.scheduleMode === 'immediate'
+                  ? 'bg-[#10B981]/10 border-[#10B981] text-[#F1F5F9]'
+                  : 'bg-[#0B111A] border-[#1E293B] text-[#94A3B8] hover:border-[#334155]'
+              ]"
+            >
+              <input
+                type="radio"
+                name="scheduleMode"
+                value="immediate"
+                :checked="composerStore.scheduleMode === 'immediate'"
+                class="accent-[#10B981] cursor-pointer"
+                @change="composerStore.scheduleMode = 'immediate'"
+              />
+              <div class="flex flex-col">
+                <span class="font-semibold">⚡ Chạy ngay (Immediate)</span>
+                <span class="text-[10px] text-[#64748B]">Bắt đầu đưa vào hàng đợi ngay</span>
+              </div>
+            </label>
+
+            <label
+              class="flex items-center space-x-2.5 p-2.5 rounded-lg border cursor-pointer transition-all text-xs select-none"
+              :class="[
+                composerStore.scheduleMode === 'scheduled'
+                  ? 'bg-[#10B981]/10 border-[#10B981] text-[#F1F5F9]'
+                  : 'bg-[#0B111A] border-[#1E293B] text-[#94A3B8] hover:border-[#334155]'
+              ]"
+            >
+              <input
+                type="radio"
+                name="scheduleMode"
+                value="scheduled"
+                :checked="composerStore.scheduleMode === 'scheduled'"
+                class="accent-[#10B981] cursor-pointer"
+                @change="composerStore.scheduleMode = 'scheduled'"
+              />
+              <div class="flex flex-col">
+                <span class="font-semibold">⏰ Hẹn giờ phát hành</span>
+                <span class="text-[10px] text-[#64748B]">Chọn ngày giờ bắt đầu chạy</span>
+              </div>
+            </label>
+          </div>
+
+          <!-- Datetime picker if scheduled -->
+          <div v-if="composerStore.scheduleMode === 'scheduled'" class="animate-fadeIn space-y-1.5">
+            <label class="block text-[11px] font-medium text-[#94A3B8]">
+              Thời gian bắt đầu phát hành (Tương lai):
+            </label>
+            <input
+              id="schedule-datetime-input"
+              v-model="composerStore.scheduledAt"
+              type="datetime-local"
+              :min="minScheduledDateTime"
+              class="w-full rounded-lg bg-[#0B111A] border border-[#1E293B] focus:border-[#10B981] px-3 py-2 text-xs font-mono text-[#F1F5F9] outline-none transition-all"
+            />
+          </div>
+
+          <!-- CTA Button: ⚡ Lên lịch chiến dịch -->
+          <button
+            id="btn-launch-campaign"
+            class="w-full py-3 px-4 rounded-xl bg-[#10B981] hover:bg-[#059669] disabled:opacity-50 disabled:cursor-not-allowed text-[#042419] font-bold text-sm shadow-[0_4px_16px_rgba(16,185,129,0.35)] transition-all flex items-center justify-center space-x-2 cursor-pointer active:scale-[0.99]"
+            :disabled="
+              composerStore.isSubmitting ||
+              !composerStore.content.trim() ||
+              !!composerStore.spintaxError ||
+              composerStore.selectedTargetIds.length === 0
+            "
+            @click="handleLaunchCampaign"
+          >
+            <svg
+              v-if="composerStore.isSubmitting"
+              class="animate-spin -ml-1 mr-2 h-4 w-4 text-[#042419]"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              ></path>
+            </svg>
+            <span v-if="composerStore.isSubmitting">Đang lưu chiến dịch & phân rã hàng đợi...</span>
+            <span v-else>⚡ Lên lịch chiến dịch (Tự động thu xuống Tray)</span>
+            <span class="text-[11px] opacity-75 font-mono hidden sm:inline">(⌘Enter)</span>
+          </button>
+        </div>
       </div>
 
       <!-- Right Panel: Target Selector & Facebook Live Preview (Story 3.3) -->
@@ -190,7 +290,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useAccountStore } from '../stores/account'
 import { useComposerStore } from '../stores/composer'
 import MediaDropzone from '../components/composer/MediaDropzone.vue'
@@ -205,6 +305,11 @@ const showImportModal = ref(false)
 const modalJsonInput = ref('')
 const isImporting = ref(false)
 const modalError = ref('')
+
+const minScheduledDateTime = computed(() => {
+  const now = new Date(Date.now() + 60000) // Tối thiểu sau 1 phút
+  return now.toISOString().slice(0, 16)
+})
 
 function closeModal(): void {
   showImportModal.value = false
@@ -248,11 +353,21 @@ async function handleTestSpintax(): Promise<void> {
   await composerStore.testSpintaxVariant()
 }
 
+async function handleLaunchCampaign(): Promise<void> {
+  await composerStore.createCampaign()
+}
+
 function handleGlobalKeydown(e: KeyboardEvent): void {
-  // Lắng nghe ⌘R (macOS) hoặc Ctrl+R (Windows/Linux)
+  // Lắng nghe ⌘R (macOS) hoặc Ctrl+R (Windows/Linux) thử biến thể
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'r') {
     e.preventDefault()
     handleTestSpintax()
+  }
+
+  // Lắng nghe ⌘Enter (macOS) hoặc Ctrl+Enter (Windows/Linux) lên lịch chiến dịch
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    e.preventDefault()
+    handleLaunchCampaign()
   }
 }
 
