@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow, app } from 'electron'
 import { getDatabase } from '../database/connection'
 import { sessionService } from '../services/session.service'
 import { targetService } from '../services/target.service'
+import { composerService } from '../services/composer.service'
 import type { AccountDTO, IPCResult, AppInfoDTO, TargetDTO, FolderDTO, TargetSyncResultDTO } from '../../preload/types'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
@@ -375,6 +376,26 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
           error: {
             code: 'BATCH_ASSIGN_FOLDER_FAILED',
             message: error?.message || 'Không thể gán nhiều nhóm vào thư mục'
+          }
+        }
+      }
+    }
+  )
+
+  // Composer Handlers
+  ipcMain.handle(
+    'composer:test-spintax',
+    async (_event, template: string): Promise<IPCResult<string>> => {
+      try {
+        const result = composerService.resolveSpintaxVariant(template)
+        return { success: true, data: result }
+      } catch (error: any) {
+        console.error('[IPC] composer:test-spintax error:', error)
+        return {
+          success: false,
+          error: {
+            code: 'SPINTAX_ERROR',
+            message: error?.message || 'Lỗi khi giải mã Spintax'
           }
         }
       }

@@ -26,6 +26,9 @@ const api: FBPulseAPI = {
     resumeAuthPaused: () => ipcRenderer.invoke('queue:resume-auth-paused'),
     getStatus: () => ipcRenderer.invoke('queue:get-status')
   },
+  composer: {
+    testSpintaxVariant: (template: string) => ipcRenderer.invoke('composer:test-spintax', template)
+  },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     maximize: () => ipcRenderer.invoke('window:maximize'),

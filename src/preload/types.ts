@@ -75,6 +75,9 @@ export interface FBPulseAPI {
     resumeAuthPaused: () => Promise<IPCResult<{ resumedCount: number }>>
     getStatus: () => Promise<IPCResult<{ scheduledCount: number; authPausedCount: number; totalCount: number }>>
   }
+  composer: {
+    testSpintaxVariant: (template: string) => Promise<IPCResult<string>>
+  }
   window: {
     minimize: () => Promise<void>
     maximize: () => Promise<void>
