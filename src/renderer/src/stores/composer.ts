@@ -22,9 +22,13 @@ export const useComposerStore = defineStore('composer', () => {
   // Media state
   const mediaFiles = ref<AttachedMedia[]>([])
 
+  // Targets selection state (Story 3.3)
+  const selectedTargetIds = ref<string[]>([])
+
   const isValid = computed(() => spintaxError.value === null)
   const hasMedia = computed(() => mediaFiles.value.length > 0)
   const coverPhoto = computed(() => (mediaFiles.value.length > 0 ? mediaFiles.value[0] : null))
+  const selectedTargetsCount = computed(() => selectedTargetIds.value.length)
 
   function setContent(newContent: string): void {
     content.value = newContent
@@ -260,6 +264,29 @@ export const useComposerStore = defineStore('composer', () => {
     mediaFiles.value = []
   }
 
+  // --- Target Selection Actions (Story 3.3) ---
+
+  function toggleTarget(id: string): void {
+    const idx = selectedTargetIds.value.indexOf(id)
+    if (idx === -1) {
+      selectedTargetIds.value.push(id)
+    } else {
+      selectedTargetIds.value.splice(idx, 1)
+    }
+  }
+
+  function selectAllTargets(ids: string[]): void {
+    selectedTargetIds.value = [...ids]
+  }
+
+  function clearSelectedTargets(): void {
+    selectedTargetIds.value = []
+  }
+
+  function isTargetSelected(id: string): boolean {
+    return selectedTargetIds.value.includes(id)
+  }
+
   return {
     content,
     currentVariant,
@@ -269,6 +296,8 @@ export const useComposerStore = defineStore('composer', () => {
     mediaFiles,
     hasMedia,
     coverPhoto,
+    selectedTargetIds,
+    selectedTargetsCount,
     setContent,
     insertSpintaxPattern,
     testSpintaxVariant,
@@ -276,6 +305,10 @@ export const useComposerStore = defineStore('composer', () => {
     removeMedia,
     reorderMedia,
     clearMedia,
-    validateSingleFile
+    validateSingleFile,
+    toggleTarget,
+    selectAllTargets,
+    clearSelectedTargets,
+    isTargetSelected
   }
 })

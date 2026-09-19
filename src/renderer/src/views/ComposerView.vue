@@ -177,62 +177,13 @@
         <MediaDropzone />
       </div>
 
-      <!-- Right Panel: Live Preview & Variant Inspector -->
-      <div class="bg-[#131B26] border border-[#1E293B] rounded-xl p-5 space-y-4">
-        <div class="flex items-center justify-between border-b border-[#1E293B]/60 pb-3">
-          <span class="text-xs font-semibold text-[#F1F5F9] uppercase tracking-wider">Facebook Live Preview</span>
-          <span class="text-[11px] text-[#10B981] font-mono font-medium">Interactive Mockup</span>
-        </div>
+      <!-- Right Panel: Target Selector & Facebook Live Preview (Story 3.3) -->
+      <div class="space-y-6">
+        <!-- Target Groups Selector (Compact) -->
+        <TargetSelectorCompact />
 
-        <!-- Variant Preview Inspector Box -->
-        <div class="space-y-2">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-medium text-[#94A3B8]">Biến Thể Giải Mã Spintax (Live Variant):</span>
-            <span class="text-[10px] text-[#64748B] font-mono">Real-time Resolution</span>
-          </div>
-
-          <div
-            id="spintax-variant-preview"
-            class="min-h-[140px] rounded-lg bg-[#0B111A] border p-4 text-xs transition-all"
-            :class="[
-              composerStore.spintaxError
-                ? 'border-[#F59E0B]/30 bg-[#F59E0B]/5'
-                : 'border-[#1E293B]'
-            ]"
-          >
-            <!-- Khi có lỗi Spintax -->
-            <div v-if="composerStore.spintaxError" class="h-full flex flex-col items-center justify-center text-center p-3 text-[#F59E0B]">
-              <span class="text-xl mb-1">⚠️</span>
-              <p class="font-semibold text-xs">Không thể tạo biến thể xem trước</p>
-              <p class="text-[11px] text-[#F59E0B]/80 mt-1">Vui lòng sửa các lỗi cú pháp Spintax ở khung soạn thảo bên trái.</p>
-            </div>
-
-            <!-- Khi có biến thể hợp lệ -->
-            <div v-else-if="composerStore.currentVariant" class="text-[#F1F5F9] whitespace-pre-wrap leading-relaxed select-text font-sans">
-              {{ composerStore.currentVariant }}
-            </div>
-
-            <!-- Khi chưa nhập nội dung -->
-            <div v-else class="h-full flex flex-col items-center justify-center text-center p-3 text-[#64748B]">
-              <span class="text-xl mb-1">📝</span>
-              <p class="font-medium text-[#94A3B8]">Chưa có nội dung xem trước</p>
-              <p class="text-[11px] text-[#64748B] mt-1">
-                Nhập nội dung kèm cú pháp Spintax và bấm <span class="text-[#10B981] font-medium">"Thử nghiệm Spintax"</span> để quan sát biến thể.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Scaffold for Story 3.3: Split Studio Target Selection & Live Card -->
-        <div class="p-4 rounded-lg bg-[#0B111A]/60 border border-[#1E293B] space-y-2">
-          <div class="flex items-center justify-between text-xs text-[#94A3B8]">
-            <span class="font-medium">Mô Phỏng Thẻ Bài Viết Facebook (Facebook Card)</span>
-            <span class="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-[#131B26] border border-[#1E293B]">Story 3.3</span>
-          </div>
-          <p class="text-[11px] text-[#64748B]">
-            Bố cục hiển thị ảnh (1 ảnh full, 2 ảnh chia đôi, 3-4 ảnh dạng collage) cùng danh sách chọn Target Groups compact sẽ được hoàn thiện ở Story 3.3.
-          </p>
-        </div>
+        <!-- Facebook Live Preview Card -->
+        <FacebookLivePreview />
       </div>
     </div>
   </div>
@@ -243,6 +194,8 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useAccountStore } from '../stores/account'
 import { useComposerStore } from '../stores/composer'
 import MediaDropzone from '../components/composer/MediaDropzone.vue'
+import TargetSelectorCompact from '../components/composer/TargetSelectorCompact.vue'
+import FacebookLivePreview from '../components/composer/FacebookLivePreview.vue'
 
 const accountStore = useAccountStore()
 const composerStore = useComposerStore()
