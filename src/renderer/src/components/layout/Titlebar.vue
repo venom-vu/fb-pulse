@@ -20,8 +20,29 @@
     <div class="flex items-center space-x-3">
       <!-- Status Pill -->
       <div class="titlebar-no-drag">
+        <!-- Checkpoint Required / Auth Warning State -->
         <div
-          v-if="account"
+          v-if="account && account.status === 'checkpoint_required'"
+          class="flex items-center space-x-2 px-2.5 py-1 rounded-full bg-[#EF4444]/15 border border-[#EF4444]/60 text-[#EF4444] text-[11px] transition-all group cursor-pointer shadow-[0_0_10px_rgba(239,68,68,0.2)]"
+          title="Phiên đăng nhập đã bị thu hồi hoặc yêu cầu xác thực. Nhấp để xem chi tiết và đăng nhập lại."
+          @click="handleCheckpointClick"
+        >
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#EF4444] opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-[#EF4444]"></span>
+          </span>
+          <span class="font-medium max-w-[140px] truncate">{{ account.name }}</span>
+          <span class="text-[9px] px-1.5 py-0.2 rounded bg-[#EF4444]/25 font-bold uppercase tracking-tight text-[#EF4444]">
+            Auth Required
+          </span>
+          <span class="text-[9px] bg-[#EF4444] text-[#0B111A] font-bold px-1.5 py-0.5 rounded ml-1 group-hover:bg-white transition-colors">
+            Xác thực lại
+          </span>
+        </div>
+
+        <!-- Connected State -->
+        <div
+          v-else-if="account && account.status === 'connected'"
           class="flex items-center space-x-2 px-2.5 py-1 rounded-full bg-[#10B981]/15 border border-[#10B981]/40 text-[#10B981] text-[11px] transition-all group cursor-pointer"
           title="Tài khoản đang kết nối. Nhấp để đăng xuất."
           @click="handleLogout"
@@ -99,12 +120,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useAccountStore } from '../../stores/account'
+import { useQueueStore } from '../../stores/queue'
 
 const accountStore = useAccountStore()
+const queueStore = useQueueStore()
 const account = computed(() => accountStore.account)
 const platform = ref<'darwin' | 'win32' | 'linux'>('darwin')
 
 const isMac = computed(() => platform.value === 'darwin')
+
+function handleCheckpointClick(): void {
+  queueStore.openSecurityModal()
+}
 
 onMounted(async () => {
   if (window.fbPulseAPI?.app) {

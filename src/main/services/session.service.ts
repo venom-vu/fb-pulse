@@ -496,6 +496,259 @@ export class SessionService {
     }
     this.loginWindow = null
   }
+
+  private healthMonitorTimer: NodeJS.Timeout | null = null
+
+  /**
+   * Kiểm tra tính hợp lệ của phiên đăng nhập (Session Health Check).
+   * Phân biệt rạch ròi giữa mất kết nối mạng internet và lỗi xác thực/thu hồi phiên thực sự.
+   */
+  public async checkSessionHealth(probeNetwork = true): Promise<{
+    valid: boolean
+    reason?: string
+    isCheckpoint?: boolean
+  }> {
+    const db = getDatabase()
+    const row = db.prepare("SELECT * FROM accounts WHERE id = 'primary_account'").get() as any
+    if (!row || row.status === 'disconnected') {
+      return { valid: false, reason: 'Chưa có tài khoản Facebook nào được kết nối' }
+    }
+
+    if (row.status === 'checkpoint_required') {
+      return {
+        valid: false,
+        reason: row.status_reason || 'Tài khoản đang yêu cầu xác thực bảo mật',
+        isCheckpoint: true
+      }
+    }
+
+    if (session && typeof session.fromPartition === 'function') {
+      try {
+        const fbSession = session.fromPartition(FB_PARTITION)
+        let cookies = await fbSession.cookies.get({ domain: '.facebook.com' })
+        if (cookies.length === 0) {
+          cookies = await fbSession.cookies.get({ url: FB_BASE_URL })
+        }
+
+        const cUser = cookies.find((c) => c.name === 'c_user')
+        const xs = cookies.find((c) => c.name === 'xs')
+
+        if (!cUser || !xs) {
+          return {
+            valid: false,
+            reason: 'Cookie xác thực (c_user/xs) không tồn tại trong phiên'
+          }
+        }
+
+        const nowSec = Math.floor(Date.now() / 1000)
+        if (cUser.expirationDate && cUser.expirationDate < nowSec) {
+          return {
+            valid: false,
+            reason: 'Cookie xác thực c_user đã hết hạn'
+          }
+        }
+        if (xs.expirationDate && xs.expirationDate < nowSec) {
+          return {
+            valid: false,
+            reason: 'Cookie xác thực xs đã hết hạn'
+          }
+        }
+
+        if (probeNetwork && typeof (fbSession as any).fetch === 'function') {
+          try {
+            const response = await (fbSession as any).fetch('https://m.facebook.com/me', {
+              method: 'GET',
+              headers: {
+                'User-Agent': fbSession.getUserAgent()
+              },
+              redirect: 'manual'
+            })
+
+            const location = response.headers.get('location') || ''
+            if (
+              response.status === 301 ||
+              response.status === 302 ||
+              response.status === 303 ||
+              response.status === 307
+            ) {
+              if (location.includes('/login') || location.includes('login.php')) {
+                return {
+                  valid: false,
+                  reason: 'Facebook đã thu hồi phiên đăng nhập (yêu cầu đăng nhập lại)',
+                  isCheckpoint: false
+                }
+              }
+              if (location.includes('/checkpoint') || location.includes('/recover')) {
+                return {
+                  valid: false,
+                  reason: 'Facebook yêu cầu xác minh bảo mật (Checkpoint)',
+                  isCheckpoint: true
+                }
+              }
+            }
+          } catch (netErr: any) {
+            const errMsg = netErr?.message || ''
+            const isNetworkOffline =
+              errMsg.includes('ERR_INTERNET_DISCONNECTED') ||
+              errMsg.includes('ERR_NAME_NOT_RESOLVED') ||
+              errMsg.includes('ENOTFOUND') ||
+              errMsg.includes('ECONNREFUSED') ||
+              errMsg.includes('ETIMEDOUT') ||
+              errMsg.includes('timeout')
+
+            if (isNetworkOffline) {
+              console.warn('[SessionService] Không thể thăm dò Facebook do lỗi kết nối mạng:', errMsg)
+              return {
+                valid: true,
+                reason: 'Không có kết nối mạng internet, tạm thời bỏ qua probe'
+              }
+            }
+          }
+        }
+      } catch (cookieErr) {
+        console.error('[SessionService] Lỗi khi kiểm tra cookies:', cookieErr)
+      }
+    }
+
+    return { valid: true }
+  }
+
+  /**
+   * Kích hoạt Emergency Pause: cập nhật trạng thái tài khoản sang checkpoint_required,
+   * chuyển toàn bộ tác vụ đang chờ trong scheduled_tasks sang paused [Paused - Auth Required],
+   * và phát sự kiện IPC thông báo tới Renderer.
+   */
+  public async triggerEmergencyPause(
+    reason: string,
+    targetWindow?: BrowserWindow | null
+  ): Promise<AccountDTO> {
+    const db = getDatabase()
+    const nowIso = new Date().toISOString()
+
+    // 1. Cập nhật trạng thái tài khoản
+    db.prepare(`
+      UPDATE accounts
+      SET status = 'checkpoint_required',
+          status_reason = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = 'primary_account'
+    `).run(reason)
+
+    // 2. Chuyển các tác vụ đang chờ sang paused kèm AUTH_REQUIRED (bảo toàn nguyên vẹn 100%)
+    db.prepare(`
+      UPDATE scheduled_tasks
+      SET status = 'paused',
+          error_code = 'AUTH_REQUIRED',
+          error_message = '[Paused - Auth Required]',
+          updated_at = CURRENT_TIMESTAMP
+      WHERE status = 'scheduled' OR status = 'running'
+    `).run()
+
+    const row = db.prepare("SELECT * FROM accounts WHERE id = 'primary_account'").get() as any
+    const updatedAccount: AccountDTO = {
+      id: row?.id || 'primary_account',
+      fb_user_id: row?.fb_user_id || null,
+      name: row?.name || 'Facebook User',
+      avatar_url: row?.avatar_url || null,
+      status: 'checkpoint_required',
+      status_reason: reason,
+      last_synced_at: row?.last_synced_at || nowIso
+    }
+
+    // 3. Phát sự kiện IPC tới Renderer
+    const windows = targetWindow
+      ? [targetWindow]
+      : BrowserWindow && typeof BrowserWindow.getAllWindows === 'function'
+        ? BrowserWindow.getAllWindows()
+        : []
+    for (const win of windows) {
+      if (win && typeof win.isDestroyed === 'function' && !win.isDestroyed()) {
+        win.webContents?.send('account:session-refreshed', updatedAccount)
+        win.webContents?.send('queue:emergency-pause', {
+          reason,
+          timestamp: nowIso
+        })
+      }
+    }
+
+    return updatedAccount
+  }
+
+  /**
+   * Khôi phục các tác vụ bị tạm dừng do xác thực (AUTH_REQUIRED) trở lại scheduled.
+   */
+  public async resumeEmergencyPausedTasks(): Promise<{ resumedCount: number }> {
+    const db = getDatabase()
+    const result = db.prepare(`
+      UPDATE scheduled_tasks
+      SET status = 'scheduled',
+          error_code = NULL,
+          error_message = NULL,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE status = 'paused' AND error_code = 'AUTH_REQUIRED'
+    `).run()
+
+    return {
+      resumedCount: result.changes
+    }
+  }
+
+  /**
+   * Lấy thống kê số lượng tác vụ trong hàng đợi.
+   */
+  public async getQueueStatus(): Promise<{
+    scheduledCount: number
+    authPausedCount: number
+    totalCount: number
+  }> {
+    const db = getDatabase()
+    const scheduledRow = db.prepare("SELECT COUNT(*) as count FROM scheduled_tasks WHERE status = 'scheduled'").get() as any
+    const pausedRow = db.prepare("SELECT COUNT(*) as count FROM scheduled_tasks WHERE status = 'paused' AND error_code = 'AUTH_REQUIRED'").get() as any
+    const totalRow = db.prepare("SELECT COUNT(*) as count FROM scheduled_tasks").get() as any
+
+    return {
+      scheduledCount: scheduledRow?.count || 0,
+      authPausedCount: pausedRow?.count || 0,
+      totalCount: totalRow?.count || 0
+    }
+  }
+
+  /**
+   * Bắt đầu tiến trình giám sát sức khỏe phiên định kỳ (mặc định 5 phút / lần).
+   */
+  public startHealthMonitoring(
+    intervalMs = 300000,
+    getMainWindow?: () => BrowserWindow | null
+  ): void {
+    this.stopHealthMonitoring()
+
+    this.healthMonitorTimer = setInterval(async () => {
+      try {
+        const health = await this.checkSessionHealth(true)
+        if (!health.valid) {
+          console.warn('[SessionService] Phát hiện phiên không hợp lệ trong chu kỳ giám sát:', health.reason)
+          const win = getMainWindow ? getMainWindow() : null
+          await this.triggerEmergencyPause(
+            health.reason || 'Phiên đăng nhập đã hết hạn hoặc bị thu hồi',
+            win
+          )
+        }
+      } catch (err) {
+        console.error('[SessionService] Lỗi trong chu kỳ giám sát phiên:', err)
+      }
+    }, intervalMs)
+  }
+
+  /**
+   * Dừng tiến trình giám sát định kỳ.
+   */
+  public stopHealthMonitoring(): void {
+    if (this.healthMonitorTimer) {
+      clearInterval(this.healthMonitorTimer)
+      this.healthMonitorTimer = null
+    }
+  }
 }
 
 export const sessionService = new SessionService()
+

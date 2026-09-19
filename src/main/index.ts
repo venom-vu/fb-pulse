@@ -72,6 +72,9 @@ if (!gotTheLock) {
 
     createWindow()
 
+    // Khởi động tiến trình giám sát sức khỏe phiên nền (mỗi 5 phút)
+    sessionService.startHealthMonitoring(300000, () => mainWindow)
+
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createWindow()
@@ -86,6 +89,7 @@ if (!gotTheLock) {
   })
 
   app.on('before-quit', () => {
+    sessionService.stopHealthMonitoring()
     closeDatabase()
   })
 }

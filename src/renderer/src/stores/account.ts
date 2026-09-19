@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { AccountDTO } from '../../../preload/types'
 
 export const useAccountStore = defineStore('account', () => {
@@ -88,6 +88,24 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
+  const isCheckpointRequired = computed(() => account.value?.status === 'checkpoint_required')
+
+  async function checkHealth(): Promise<{ valid: boolean; reason?: string }> {
+    if (!window.fbPulseAPI?.account?.checkHealth) return { valid: true }
+    try {
+      const res = await window.fbPulseAPI.account.checkHealth()
+      if (res.success && res.data) {
+        if (!res.data.valid) {
+          await fetchProfile()
+        }
+        return res.data
+      }
+      return { valid: false, reason: res.error?.message }
+    } catch (err: any) {
+      return { valid: false, reason: err?.message }
+    }
+  }
+
   function initListeners(): () => void {
     if (!window.fbPulseAPI?.onSessionRefreshed) return () => {}
     return window.fbPulseAPI.onSessionRefreshed((updatedAccount) => {
@@ -99,6 +117,8 @@ export const useAccountStore = defineStore('account', () => {
     account,
     isLoading,
     isLoggingIn,
+    isCheckpointRequired,
+    checkHealth,
     fetchProfile,
     loginFacebook,
     importSessionJson,
@@ -106,3 +126,4 @@ export const useAccountStore = defineStore('account', () => {
     initListeners
   }
 })
+

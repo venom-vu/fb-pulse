@@ -6,7 +6,13 @@ const api: FBPulseAPI = {
     getProfile: () => ipcRenderer.invoke('account:get-profile'),
     loginWebView: () => ipcRenderer.invoke('account:login-webview'),
     importSessionJson: (jsonStr: string) => ipcRenderer.invoke('account:import-session-json', jsonStr),
-    logout: () => ipcRenderer.invoke('account:logout')
+    logout: () => ipcRenderer.invoke('account:logout'),
+    checkHealth: () => ipcRenderer.invoke('account:check-health'),
+    triggerEmergencyPause: (reason?: string) => ipcRenderer.invoke('account:trigger-emergency-pause', reason)
+  },
+  queue: {
+    resumeAuthPaused: () => ipcRenderer.invoke('queue:resume-auth-paused'),
+    getStatus: () => ipcRenderer.invoke('queue:get-status')
   },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),

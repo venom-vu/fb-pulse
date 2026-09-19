@@ -140,4 +140,88 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       }
     }
   })
+
+  // Session Health & Emergency Pause Handlers
+  ipcMain.handle('account:check-health', async (): Promise<IPCResult<{ valid: boolean; reason?: string; isCheckpoint?: boolean }>> => {
+    try {
+      const result = await sessionService.checkSessionHealth(true)
+      if (!result.valid) {
+        await sessionService.triggerEmergencyPause(
+          result.reason || 'Phiên đăng nhập đã hết hạn hoặc bị thu hồi',
+          mainWindow
+        )
+      }
+      return {
+        success: true,
+        data: result
+      }
+    } catch (error: any) {
+      console.error('[IPC] account:check-health error:', error)
+      return {
+        success: false,
+        error: {
+          code: 'HEALTH_CHECK_FAILED',
+          message: error?.message || 'Kiểm tra sức khỏe phiên thất bại'
+        }
+      }
+    }
+  })
+
+  ipcMain.handle('account:trigger-emergency-pause', async (_event, reason?: string): Promise<IPCResult<AccountDTO>> => {
+    try {
+      const updatedAccount = await sessionService.triggerEmergencyPause(
+        reason || 'Cảnh báo: Đã kích hoạt dừng khẩn cấp',
+        mainWindow
+      )
+      return {
+        success: true,
+        data: updatedAccount
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: 'EMERGENCY_PAUSE_FAILED',
+          message: error?.message || 'Không thể kích hoạt dừng khẩn cấp'
+        }
+      }
+    }
+  })
+
+  ipcMain.handle('queue:resume-auth-paused', async (): Promise<IPCResult<{ resumedCount: number }>> => {
+    try {
+      const result = await sessionService.resumeEmergencyPausedTasks()
+      return {
+        success: true,
+        data: result
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: 'RESUME_FAILED',
+          message: error?.message || 'Không thể khôi phục các tác vụ trong hàng đợi'
+        }
+      }
+    }
+  })
+
+  ipcMain.handle('queue:get-status', async (): Promise<IPCResult<{ scheduledCount: number; authPausedCount: number; totalCount: number }>> => {
+    try {
+      const status = await sessionService.getQueueStatus()
+      return {
+        success: true,
+        data: status
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: 'QUEUE_STATUS_FAILED',
+          message: error?.message || 'Không thể lấy trạng thái hàng đợi'
+        }
+      }
+    }
+  })
 }
+

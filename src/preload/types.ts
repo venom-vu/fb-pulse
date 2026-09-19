@@ -33,6 +33,12 @@ export interface FBPulseAPI {
     loginWebView: () => Promise<IPCResult<{ success: boolean; cancelled?: boolean; userId?: string }>>
     importSessionJson: (jsonStr: string) => Promise<IPCResult<AccountDTO>>
     logout: () => Promise<IPCResult<void>>
+    checkHealth: () => Promise<IPCResult<{ valid: boolean; reason?: string; isCheckpoint?: boolean }>>
+    triggerEmergencyPause: (reason?: string) => Promise<IPCResult<AccountDTO>>
+  }
+  queue: {
+    resumeAuthPaused: () => Promise<IPCResult<{ resumedCount: number }>>
+    getStatus: () => Promise<IPCResult<{ scheduledCount: number; authPausedCount: number; totalCount: number }>>
   }
   window: {
     minimize: () => Promise<void>

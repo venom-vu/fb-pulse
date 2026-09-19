@@ -188,5 +188,92 @@ describe('Pinia Stores & Navigation Matrix Verification', () => {
     expect(accountStore.account).toBeNull()
     expect(accountStore.isLoading).toBe(false)
   })
+
+  it('Account Store (Story 1.4): detects isCheckpointRequired and runs checkHealth', async () => {
+    const accountStore = useAccountStore()
+
+    accountStore.account = {
+      id: 'primary_account',
+      fb_user_id: '100099887766554',
+      name: 'Checkpoint User',
+      avatar_url: null,
+      status: 'checkpoint_required',
+      status_reason: 'Facebook yêu cầu Checkpoint',
+      last_synced_at: new Date().toISOString()
+    }
+
+    expect(accountStore.isCheckpointRequired).toBe(true)
+
+    // @ts-ignore
+    global.window = {
+      fbPulseAPI: {
+        account: {
+          checkHealth: async () => ({
+            success: true,
+            data: { valid: false, reason: 'Yêu cầu xác thực', isCheckpoint: true }
+          }),
+          getProfile: async () => ({
+            success: true,
+            data: accountStore.account
+          })
+        }
+      }
+    }
+
+    const health = await accountStore.checkHealth()
+    expect(health.valid).toBe(false)
+    expect(health.reason).toBe('Yêu cầu xác thực')
+  })
+
+  it('Queue Store (Story 1.4): manages emergency pause, fetch status, and resume', async () => {
+    const { useQueueStore } = await import('../src/renderer/src/stores/queue')
+    const queueStore = useQueueStore()
+
+    expect(queueStore.isEmergencyPaused).toBe(false)
+    expect(queueStore.authPausedCount).toBe(0)
+
+    let authPaused = 3
+    let scheduled = 0
+
+    // @ts-ignore
+    global.window = {
+      fbPulseAPI: {
+        queue: {
+          getStatus: async () => ({
+            success: true,
+            data: { scheduledCount: scheduled, authPausedCount: authPaused, totalCount: 5 }
+          }),
+          resumeAuthPaused: async () => {
+            authPaused = 0
+            scheduled = 3
+            return {
+              success: true,
+              data: { resumedCount: 3 }
+            }
+          }
+        }
+      }
+    }
+
+    await queueStore.fetchQueueStatus()
+    expect(queueStore.authPausedCount).toBe(3)
+    expect(queueStore.totalCount).toBe(5)
+    expect(queueStore.isEmergencyPaused).toBe(true)
+
+    // Test handleEmergencyPauseEvent
+    queueStore.handleEmergencyPauseEvent({
+      reason: 'Đổi mật khẩu từ xa',
+      timestamp: '2026-09-19T11:00:00Z'
+    })
+    expect(queueStore.isEmergencyPaused).toBe(true)
+    expect(queueStore.emergencyPauseReason).toBe('Đổi mật khẩu từ xa')
+    expect(queueStore.showSecurityModal).toBe(true)
+
+    // Test resume
+    const res = await queueStore.resumeQueue()
+    expect(res.success).toBe(true)
+    expect(res.resumedCount).toBe(3)
+    expect(queueStore.isEmergencyPaused).toBe(false)
+  })
 })
 

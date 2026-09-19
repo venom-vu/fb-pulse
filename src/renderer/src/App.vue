@@ -16,6 +16,9 @@
         <SettingsView v-else-if="activeTab === 'settings'" />
       </main>
     </div>
+
+    <!-- Global Security Alert Modal (Emergency Pause) -->
+    <SecurityAlertModal />
   </div>
 </template>
 
@@ -27,24 +30,33 @@ import ComposerView from './views/ComposerView.vue'
 import QueueView from './views/QueueView.vue'
 import TargetsView from './views/TargetsView.vue'
 import SettingsView from './views/SettingsView.vue'
+import SecurityAlertModal from './components/common/SecurityAlertModal.vue'
 import { useNavigationStore } from './stores/navigation'
 import { useAccountStore } from './stores/account'
+import { useQueueStore } from './stores/queue'
 
 const navStore = useNavigationStore()
 const accountStore = useAccountStore()
+const queueStore = useQueueStore()
 
 const activeTab = computed(() => navStore.activeTab)
 
 let cleanupSessionListener: (() => void) | undefined
+let cleanupQueueListener: (() => void) | undefined
 
 onMounted(async () => {
   await accountStore.fetchProfile()
+  await queueStore.fetchQueueStatus()
   cleanupSessionListener = accountStore.initListeners()
+  cleanupQueueListener = queueStore.initListeners()
 })
 
 onUnmounted(() => {
   if (cleanupSessionListener) {
     cleanupSessionListener()
+  }
+  if (cleanupQueueListener) {
+    cleanupQueueListener()
   }
 })
 </script>
