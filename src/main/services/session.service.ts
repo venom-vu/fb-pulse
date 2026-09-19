@@ -73,6 +73,7 @@ export class SessionService {
     return new Promise<LoginResult>((resolve) => {
       this.pendingPromiseResolver = resolve
       let hasCompletedLogin = false
+      let detectedUserId: string | null = null
 
       const fbSession = session.fromPartition(FB_PARTITION)
       // Loại bỏ định danh Electron khỏi User-Agent để tránh Facebook chặn trình duyệt
@@ -98,16 +99,29 @@ export class SessionService {
         }
       })
 
+      // Ngăn chặn mở cửa sổ mới ngoài ý muốn và giữ luồng xác thực bên trong cửa sổ hiện tại
+      this.loginWindow.webContents.setWindowOpenHandler(({ url }) => {
+        if (url.includes('facebook.com') || url.includes('meta.com') || url.includes('accountkit.com')) {
+          this.loginWindow?.loadURL(url)
+        }
+        return { action: 'deny' }
+      })
+
       const handlePossibleSuccess = async (currentUrl: string): Promise<void> => {
         if (hasCompletedLogin) return
 
         if (isFacebookNewsfeed(currentUrl)) {
           try {
-            const cookies = await fbSession.cookies.get({ domain: '.facebook.com' })
+            // Truy vấn cookie theo cả URL gốc và domain để đảm bảo bắt trọn host-only cookies
+            let cookies = await fbSession.cookies.get({ url: FB_BASE_URL })
+            if (!extractFacebookUserId(cookies)) {
+              cookies = await fbSession.cookies.get({ domain: '.facebook.com' })
+            }
             const userId = extractFacebookUserId(cookies)
 
             if (userId) {
               hasCompletedLogin = true
+              detectedUserId = userId
 
               // Đếm ngược tối đa 2 giây (1.5 giây) rồi đóng cửa sổ an toàn
               if (this.autoCloseTimer) clearTimeout(this.autoCloseTimer)
@@ -151,13 +165,20 @@ export class SessionService {
         }
         this.loginWindow = null
 
-        if (!hasCompletedLogin && this.pendingPromiseResolver) {
+        if (this.pendingPromiseResolver) {
           const resolver = this.pendingPromiseResolver
           this.pendingPromiseResolver = null
-          resolver({
-            success: false,
-            cancelled: true
-          })
+          if (hasCompletedLogin && detectedUserId) {
+            resolver({
+              success: true,
+              userId: detectedUserId
+            })
+          } else {
+            resolver({
+              success: false,
+              cancelled: true
+            })
+          }
         }
       })
 
