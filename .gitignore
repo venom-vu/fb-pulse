@@ -1,0 +1,14 @@
+node_modules/
+out/
+dist/
+*.log
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+.vscode/
+.idea/
+_bmad/
+_bmad-output/
+.agents/
+.claude/
