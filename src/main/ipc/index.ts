@@ -128,6 +128,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle('account:logout', async (): Promise<IPCResult<void>> => {
     try {
       await sessionService.clearSession()
+      mainWindow.webContents.send('account:session-refreshed', null)
       return { success: true }
     } catch (error: any) {
       return {

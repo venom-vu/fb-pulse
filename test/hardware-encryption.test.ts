@@ -229,5 +229,41 @@ describe('Story 1.3: Hardware Encryption & Local Session Persistence', () => {
       const afterClear = await sessionService.restoreSessionFromDatabase()
       expect(afterClear).toBeNull()
     })
+
+    it('preserves custom user name and avatar when updating session with default placeholder', async () => {
+      // First save with custom profile data
+      await sessionService.saveSessionToDatabase({
+        fb_user_id: '100077778888999',
+        name: 'Nguyễn Văn VIP',
+        avatar_url: 'https://example.com/vip.png',
+        cookies: [
+          { name: 'c_user', value: '100077778888999' },
+          { name: 'xs', value: '11:initial_xs' }
+        ]
+      })
+
+      // Second save from cookie import with default name and null avatar
+      await sessionService.saveSessionToDatabase({
+        fb_user_id: '100077778888999',
+        cookies: [
+          { name: 'c_user', value: '100077778888999' },
+          { name: 'xs', value: '22:updated_xs' }
+        ]
+      })
+
+      const row = testDb.prepare('SELECT * FROM accounts WHERE id = ?').get('primary_account') as any
+      expect(row.name).toBe('Nguyễn Văn VIP')
+      expect(row.avatar_url).toBe('https://example.com/vip.png')
+    })
+  })
+
+  describe('Review Patch: UTF-8 BOM stripping', () => {
+    it('successfully parses JSON string prepended with UTF-8 BOM character', () => {
+      const jsonWithBom = '\uFEFF[{"name":"c_user","value":"10009999"},{"name":"xs","value":"session_xs"}]'
+      const result = validateAndParseSessionJson(jsonWithBom)
+      expect(result.valid).toBe(true)
+      expect(result.userId).toBe('10009999')
+    })
   })
 })
+

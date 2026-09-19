@@ -94,7 +94,8 @@ export function validateAndParseSessionJson(jsonStr: string): {
   userId?: string
 } {
   try {
-    const parsed = JSON.parse(jsonStr.trim())
+    const cleanJson = jsonStr.replace(/^\uFEFF/, '').trim()
+    const parsed = JSON.parse(cleanJson)
     let cookieList: any[] = []
 
     if (Array.isArray(parsed)) {
@@ -167,8 +168,12 @@ export class SessionService {
       VALUES (?, ?, ?, ?, ?, 'connected', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT(id) DO UPDATE SET
         fb_user_id = excluded.fb_user_id,
-        name = excluded.name,
-        avatar_url = excluded.avatar_url,
+        name = CASE
+          WHEN excluded.name LIKE 'Facebook User (%)' AND accounts.name IS NOT NULL AND accounts.name NOT LIKE 'Facebook User (%)'
+          THEN accounts.name
+          ELSE excluded.name
+        END,
+        avatar_url = COALESCE(excluded.avatar_url, accounts.avatar_url),
         encrypted_session = excluded.encrypted_session,
         status = 'connected',
         status_reason = NULL,
@@ -222,7 +227,7 @@ export class SessionService {
                 url,
                 name: cookie.name,
                 value: cookie.value,
-                domain: cookie.domain,
+                domain,
                 path: cookie.path || '/',
                 secure: cookie.secure !== undefined ? Boolean(cookie.secure) : true,
                 httpOnly: cookie.httpOnly !== undefined ? Boolean(cookie.httpOnly) : false,
@@ -284,7 +289,7 @@ export class SessionService {
               url,
               name: cookie.name,
               value: cookie.value,
-              domain: cookie.domain,
+              domain,
               path: cookie.path || '/',
               secure: cookie.secure !== undefined ? Boolean(cookie.secure) : true,
               httpOnly: cookie.httpOnly !== undefined ? Boolean(cookie.httpOnly) : false,

@@ -136,6 +136,8 @@ async function connectFacebook(): Promise<void> {
 }
 
 async function handleLogout(): Promise<void> {
-  await accountStore.logout()
+  if (confirm('Bạn có chắc chắn muốn đăng xuất tài khoản này không?')) {
+    await accountStore.logout()
+  }
 }
 </script>
