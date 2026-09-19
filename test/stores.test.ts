@@ -70,4 +70,62 @@ describe('Pinia Stores & Navigation Matrix Verification', () => {
     expect(accountStore.account?.name).toBe('John Doe')
     expect(accountStore.account?.status).toBe('connected')
   })
+
+  it('Account Store: handles loginFacebook when cancelled by user', async () => {
+    const accountStore = useAccountStore()
+
+    // @ts-ignore
+    global.window = {
+      fbPulseAPI: {
+        account: {
+          getProfile: async () => ({ success: true, data: null }),
+          loginWebView: async () => ({
+            success: true,
+            data: { success: false, cancelled: true }
+          })
+        }
+      }
+    }
+
+    const res = await accountStore.loginFacebook()
+    expect(res.success).toBe(false)
+    expect(res.cancelled).toBe(true)
+    expect(accountStore.isLoggingIn).toBe(false)
+    expect(accountStore.account).toBeNull()
+  })
+
+  it('Account Store: handles loginFacebook when successful', async () => {
+    const accountStore = useAccountStore()
+
+    // @ts-ignore
+    global.window = {
+      fbPulseAPI: {
+        account: {
+          getProfile: async () => ({
+            success: true,
+            data: {
+              id: 'primary_account',
+              fb_user_id: '100088192837162',
+              name: 'Facebook User (100088192837162)',
+              avatar_url: null,
+              status: 'connected',
+              status_reason: null,
+              last_synced_at: new Date().toISOString()
+            }
+          }),
+          loginWebView: async () => ({
+            success: true,
+            data: { success: true, userId: '100088192837162' }
+          })
+        }
+      }
+    }
+
+    const res = await accountStore.loginFacebook()
+    expect(res.success).toBe(true)
+    expect(res.userId).toBe('100088192837162')
+    expect(accountStore.isLoggingIn).toBe(false)
+    expect(accountStore.account).not.toBeNull()
+    expect(accountStore.account?.fb_user_id).toBe('100088192837162')
+  })
 })

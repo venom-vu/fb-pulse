@@ -30,7 +30,7 @@ export interface IPCResult<T> {
 export interface FBPulseAPI {
   account: {
     getProfile: () => Promise<IPCResult<AccountDTO | null>>
-    loginWebView: () => Promise<IPCResult<{ success: boolean }>>
+    loginWebView: () => Promise<IPCResult<{ success: boolean; cancelled?: boolean; userId?: string }>>
     logout: () => Promise<IPCResult<void>>
   }
   window: {

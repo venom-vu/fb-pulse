@@ -31,13 +31,18 @@
           <span class="font-medium max-w-[140px] truncate">Connected: {{ account.name }}</span>
           <span class="text-[9px] px-1 py-0.2 rounded bg-[#10B981]/20 font-bold uppercase">Active</span>
         </div>
-        <div
+        <button
           v-else
-          class="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-[#131B26] border border-[#1E293B] text-[#94A3B8] text-[11px] shadow-sm"
+          class="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-[#131B26] hover:bg-[#1E293B] border border-[#1E293B] hover:border-[#10B981]/50 text-[#94A3B8] hover:text-[#F1F5F9] text-[11px] shadow-sm transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+          :disabled="accountStore.isLoggingIn"
+          title="Nhấp để kết nối tài khoản Facebook"
+          @click="connectFacebook"
         >
-          <span class="w-1.5 h-1.5 rounded-full bg-[#64748B]"></span>
-          <span>Chưa kết nối tài khoản Facebook</span>
-        </div>
+          <span v-if="accountStore.isLoggingIn" class="w-1.5 h-1.5 rounded-full bg-[#F59E0B] animate-pulse"></span>
+          <span v-else class="w-1.5 h-1.5 rounded-full bg-[#64748B]"></span>
+          <span v-if="accountStore.isLoggingIn">Đang mở trình duyệt...</span>
+          <span v-else>Chưa kết nối tài khoản Facebook · <strong class="text-[#10B981] font-medium">Kết nối ngay</strong></span>
+        </button>
       </div>
 
       <!-- Windows / Linux Window Controls -->
@@ -108,5 +113,9 @@ function maximizeWindow(): void {
 
 function closeWindow(): void {
   window.fbPulseAPI?.window?.close()
+}
+
+async function connectFacebook(): Promise<void> {
+  await accountStore.loginFacebook()
 }
 </script>

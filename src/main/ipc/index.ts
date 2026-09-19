@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow, app } from 'electron'
 import { getDatabase } from '../database/connection'
+import { sessionService } from '../services/session.service'
 import type { AccountDTO, IPCResult, AppInfoDTO } from '../../preload/types'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
@@ -68,13 +69,39 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   })
 
-  ipcMain.handle('account:login-webview', async (): Promise<IPCResult<{ success: boolean }>> => {
-    // Scaffolded for Story 1.2
-    return {
-      success: true,
-      data: { success: false }
+  ipcMain.handle(
+    'account:login-webview',
+    async (): Promise<IPCResult<{ success: boolean; cancelled?: boolean; userId?: string }>> => {
+      try {
+        const result = await sessionService.openLoginWindow(mainWindow)
+        if (result.success && result.userId) {
+          const accountData: AccountDTO = {
+            id: 'primary_account',
+            fb_user_id: result.userId,
+            name: `Facebook User (${result.userId})`,
+            avatar_url: null,
+            status: 'connected',
+            status_reason: null,
+            last_synced_at: new Date().toISOString()
+          }
+          mainWindow.webContents.send('account:session-refreshed', accountData)
+        }
+        return {
+          success: true,
+          data: result
+        }
+      } catch (error: any) {
+        console.error('[IPC] account:login-webview error:', error)
+        return {
+          success: false,
+          error: {
+            code: 'LOGIN_ERROR',
+            message: error?.message || 'Failed to open secure login window'
+          }
+        }
+      }
     }
-  })
+  )
 
   ipcMain.handle('account:logout', async (): Promise<IPCResult<void>> => {
     try {
