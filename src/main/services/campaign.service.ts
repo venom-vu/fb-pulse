@@ -53,8 +53,15 @@ export class CampaignService {
         ? payload.rawContent.slice(0, 50).replace(/\r?\n/g, ' ') + '...'
         : payload.rawContent.replace(/\r?\n/g, ' '))
     const mediaPathsJson = JSON.stringify(payload.mediaPaths || [])
-    const minJitter = payload.minJitterSec ?? 180
-    const maxJitter = payload.maxJitterSec ?? 300
+    const minJitter = payload.minJitterSec !== undefined ? payload.minJitterSec : 180
+    const maxJitter = payload.maxJitterSec !== undefined ? payload.maxJitterSec : 300
+
+    if (minJitter < 60) {
+      throw new Error('Thời gian nghỉ tối thiểu phải từ 60 giây trở lên')
+    }
+    if (maxJitter < minJitter) {
+      throw new Error('Thời gian nghỉ tối đa phải lớn hơn hoặc bằng thời gian tối thiểu')
+    }
 
     const db = getDatabase()
 
@@ -143,6 +150,49 @@ export class CampaignService {
   ): string {
     const rawKey = `${accountId}:${targetId}:${campaignId}:${scheduledAt}`
     return crypto.createHash('md5').update(rawKey).digest('hex')
+  }
+
+  /**
+   * Đếm tổng số bài đăng trong vòng 24 giờ qua của tài khoản
+   */
+  get24hPostCount(accountId = 'primary_account'): number {
+    const db = getDatabase()
+    const row = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM scheduled_tasks
+      WHERE account_id = ?
+        AND status != 'cancelled'
+        AND (
+          datetime(scheduled_at) >= datetime('now', '-24 hours')
+          OR datetime(created_at) >= datetime('now', '-24 hours')
+        )
+    `).get(accountId) as { count: number } | undefined
+
+    return row?.count ?? 0
+  }
+
+  /**
+   * Kiểm tra ngưỡng an toàn 30 bài/24h
+   */
+  checkDailyLimit(
+    accountId = 'primary_account',
+    incomingTaskCount = 0
+  ): {
+    currentCount: number
+    incomingCount: number
+    totalCount: number
+    exceedsLimit: boolean
+    threshold: number
+  } {
+    const currentCount = this.get24hPostCount(accountId)
+    const totalCount = currentCount + incomingTaskCount
+    return {
+      currentCount,
+      incomingCount: incomingTaskCount,
+      totalCount,
+      exceedsLimit: totalCount > 30,
+      threshold: 30
+    }
   }
 }
 

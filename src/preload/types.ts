@@ -70,6 +70,23 @@ export interface CreateCampaignResultDTO {
   scheduledAt: string
 }
 
+export interface QueueTickDTO {
+  status: 'idle' | 'jitter_waiting' | 'running' | 'paused'
+  remainingSeconds: number
+  totalSeconds: number
+  formattedCountdown: string
+  currentTaskId?: string
+  nextTaskId?: string
+}
+
+export interface DailyLimitCheckResultDTO {
+  currentCount: number
+  incomingCount: number
+  totalCount: number
+  exceedsLimit: boolean
+  threshold: number
+}
+
 export interface FBPulseAPI {
   account: {
     getProfile: () => Promise<IPCResult<AccountDTO | null>>
@@ -92,10 +109,12 @@ export interface FBPulseAPI {
   queue: {
     resumeAuthPaused: () => Promise<IPCResult<{ resumedCount: number }>>
     getStatus: () => Promise<IPCResult<{ scheduledCount: number; authPausedCount: number; totalCount: number }>>
+    getJitterStatus: () => Promise<IPCResult<QueueTickDTO>>
   }
   composer: {
     testSpintaxVariant: (template: string) => Promise<IPCResult<string>>
     createCampaign: (payload: CreateCampaignDTO) => Promise<IPCResult<CreateCampaignResultDTO>>
+    checkDailyLimit: (incomingTaskCount?: number) => Promise<IPCResult<DailyLimitCheckResultDTO>>
   }
   window: {
     minimize: () => Promise<void>
@@ -109,6 +128,7 @@ export interface FBPulseAPI {
   }
   onSessionRefreshed: (callback: (account: AccountDTO) => void) => () => void
   onEmergencyPause: (callback: (payload: { reason: string; timestamp: string }) => void) => () => void
+  onQueueTick: (callback: (payload: QueueTickDTO) => void) => () => void
 }
 
 declare global {

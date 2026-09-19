@@ -24,11 +24,13 @@ const api: FBPulseAPI = {
   },
   queue: {
     resumeAuthPaused: () => ipcRenderer.invoke('queue:resume-auth-paused'),
-    getStatus: () => ipcRenderer.invoke('queue:get-status')
+    getStatus: () => ipcRenderer.invoke('queue:get-status'),
+    getJitterStatus: () => ipcRenderer.invoke('queue:get-jitter-status')
   },
   composer: {
     testSpintaxVariant: (template: string) => ipcRenderer.invoke('composer:test-spintax', template),
-    createCampaign: (payload) => ipcRenderer.invoke('composer:create-campaign', payload)
+    createCampaign: (payload) => ipcRenderer.invoke('composer:create-campaign', payload),
+    checkDailyLimit: (incomingTaskCount) => ipcRenderer.invoke('composer:check-daily-limit', incomingTaskCount)
   },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),
@@ -52,6 +54,13 @@ const api: FBPulseAPI = {
     ipcRenderer.on('queue:emergency-pause', subscription)
     return () => {
       ipcRenderer.removeListener('queue:emergency-pause', subscription)
+    }
+  },
+  onQueueTick: (callback: (payload: any) => void) => {
+    const subscription = (_event: IpcRendererEvent, payload: any): void => callback(payload)
+    ipcRenderer.on('queue:tick', subscription)
+    return () => {
+      ipcRenderer.removeListener('queue:tick', subscription)
     }
   }
 }

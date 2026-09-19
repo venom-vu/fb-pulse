@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import type { QueueTickDTO } from '../../../preload/types'
 
 export const useQueueStore = defineStore('queue', () => {
   const isEmergencyPaused = ref<boolean>(false)
@@ -10,6 +11,16 @@ export const useQueueStore = defineStore('queue', () => {
   const totalCount = ref<number>(0)
   const isResuming = ref<boolean>(false)
   const showSecurityModal = ref<boolean>(false)
+
+  // Anti-ban Jitter State (Story 4.2)
+  const queueTick = ref<QueueTickDTO>({
+    status: 'idle',
+    remainingSeconds: 0,
+    totalSeconds: 0,
+    formattedCountdown: '00:00'
+  })
+
+  const isJitterWaiting = computed(() => queueTick.value.status === 'jitter_waiting')
 
   async function fetchQueueStatus(): Promise<void> {
     if (!window.fbPulseAPI?.queue?.getStatus) return
@@ -27,6 +38,18 @@ export const useQueueStore = defineStore('queue', () => {
       }
     } catch (err) {
       console.error('[QueueStore] Lỗi khi lấy trạng thái hàng đợi:', err)
+    }
+  }
+
+  async function fetchJitterStatus(): Promise<void> {
+    if (!window.fbPulseAPI?.queue?.getJitterStatus) return
+    try {
+      const res = await window.fbPulseAPI.queue.getJitterStatus()
+      if (res.success && res.data) {
+        queueTick.value = res.data
+      }
+    } catch (err) {
+      console.error('[QueueStore] Lỗi khi lấy trạng thái Jitter:', err)
     }
   }
 
@@ -74,10 +97,25 @@ export const useQueueStore = defineStore('queue', () => {
   }
 
   function initListeners(): () => void {
-    if (!window.fbPulseAPI?.onEmergencyPause) return () => {}
-    return window.fbPulseAPI.onEmergencyPause((payload) => {
-      handleEmergencyPauseEvent(payload)
-    })
+    const cleanups: Array<() => void> = []
+
+    if (window.fbPulseAPI?.onEmergencyPause) {
+      const cleanupPause = window.fbPulseAPI.onEmergencyPause((payload) => {
+        handleEmergencyPauseEvent(payload)
+      })
+      cleanups.push(cleanupPause)
+    }
+
+    if (window.fbPulseAPI?.onQueueTick) {
+      const cleanupTick = window.fbPulseAPI.onQueueTick((payload) => {
+        queueTick.value = payload
+      })
+      cleanups.push(cleanupTick)
+    }
+
+    return () => {
+      cleanups.forEach((c) => c())
+    }
   }
 
   return {
@@ -89,7 +127,10 @@ export const useQueueStore = defineStore('queue', () => {
     totalCount,
     isResuming,
     showSecurityModal,
+    queueTick,
+    isJitterWaiting,
     fetchQueueStatus,
+    fetchJitterStatus,
     resumeQueue,
     handleEmergencyPauseEvent,
     openSecurityModal,

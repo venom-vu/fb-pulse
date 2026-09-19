@@ -26,6 +26,57 @@
       </div>
     </div>
 
+    <!-- Jitter Countdown Card (Story 4.2) -->
+    <div
+      v-if="queueStore.isJitterWaiting"
+      id="queue-jitter-countdown-banner"
+      class="bg-[#131B26] border-2 border-[#F59E0B] rounded-xl p-5 shadow-[0_0_25px_rgba(245,158,11,0.15)] space-y-3 animate-fade-in"
+    >
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="w-9 h-9 rounded-full bg-[#F59E0B]/20 border border-[#F59E0B]/50 flex items-center justify-center text-[#F59E0B] text-lg shrink-0">
+            ⏳
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#F59E0B] text-[#0B111A]">
+                Anti-ban Jitter Đang Kích Hoạt
+              </span>
+              <span class="text-xs text-[#94A3B8]">Giãn cách an toàn giữa 2 bài đăng</span>
+            </div>
+            <h3 class="text-sm font-bold text-[#F1F5F9] mt-0.5">
+              Hệ thống đang nghỉ ngơi ngẫu nhiên để bảo vệ tài khoản khỏi thuật toán chống bot
+            </h3>
+          </div>
+        </div>
+
+        <div class="text-right">
+          <div class="text-[10px] text-[#94A3B8] uppercase tracking-wider font-semibold">Thời gian còn lại</div>
+          <div id="queue-countdown-timer" class="text-2xl font-black font-mono text-[#F59E0B] tracking-tight">
+            {{ queueStore.queueTick.formattedCountdown }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Progress bar -->
+      <div class="w-full bg-[#0B111A] h-2 rounded-full overflow-hidden border border-[#1E293B]">
+        <div
+          class="bg-gradient-to-r from-[#F59E0B] to-[#10B981] h-full transition-all duration-1000 ease-linear rounded-full"
+          :style="{
+            width: `${
+              queueStore.queueTick.totalSeconds > 0
+                ? Math.round(
+                    ((queueStore.queueTick.totalSeconds - queueStore.queueTick.remainingSeconds) /
+                      queueStore.queueTick.totalSeconds) *
+                      100
+                  )
+                : 0
+            }%`
+          }"
+        ></div>
+      </div>
+    </div>
+
     <!-- Emergency Pause Warning Box (UX-DR8 & AD-7 Standard) -->
     <div
       v-if="queueStore.isEmergencyPaused || queueStore.authPausedCount > 0"

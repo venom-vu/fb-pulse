@@ -5,6 +5,7 @@ import { targetService } from '../services/target.service'
 import { composerService } from '../services/composer.service'
 import { campaignService } from '../services/campaign.service'
 import { trayService } from '../services/tray.service'
+import { schedulerService } from '../services/scheduler.service'
 import type {
   AccountDTO,
   IPCResult,
@@ -13,10 +14,14 @@ import type {
   FolderDTO,
   TargetSyncResultDTO,
   CreateCampaignDTO,
-  CreateCampaignResultDTO
+  CreateCampaignResultDTO,
+  QueueTickDTO,
+  DailyLimitCheckResultDTO
 } from '../../preload/types'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
+  schedulerService.setMainWindow(mainWindow)
+
   // Window Control Handlers
   ipcMain.handle('window:minimize', () => {
     mainWindow.minimize()
@@ -241,6 +246,24 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   })
 
+  ipcMain.handle('queue:get-jitter-status', async (): Promise<IPCResult<QueueTickDTO>> => {
+    try {
+      const status = schedulerService.getJitterStatus()
+      return {
+        success: true,
+        data: status
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: 'JITTER_STATUS_FAILED',
+          message: error?.message || 'Không thể lấy trạng thái Jitter'
+        }
+      }
+    }
+  })
+
   // Targets & Folders Handlers
   ipcMain.handle('targets:list', async (): Promise<IPCResult<TargetDTO[]>> => {
     try {
@@ -430,6 +453,25 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
           error: {
             code: 'CREATE_CAMPAIGN_FAILED',
             message: error?.message || 'Không thể tạo chiến dịch'
+          }
+        }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'composer:check-daily-limit',
+    async (_event, incomingCount?: number): Promise<IPCResult<DailyLimitCheckResultDTO>> => {
+      try {
+        const result = campaignService.checkDailyLimit('primary_account', incomingCount || 0)
+        return { success: true, data: result }
+      } catch (error: any) {
+        console.error('[IPC] composer:check-daily-limit error:', error)
+        return {
+          success: false,
+          error: {
+            code: 'DAILY_LIMIT_CHECK_FAILED',
+            message: error?.message || 'Không thể kiểm tra giới hạn bài đăng hàng ngày'
           }
         }
       }

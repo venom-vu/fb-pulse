@@ -29,11 +29,32 @@
       <div class="bg-[#131B26] border border-[#1E293B] rounded-lg p-3 space-y-2 text-xs">
         <div class="flex items-center justify-between">
           <span class="text-[11px] font-medium text-[#94A3B8]">Anti-ban Guard</span>
-          <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[#10B981]/20 text-[#10B981]">
+          <span
+            v-if="queueStore.isJitterWaiting"
+            id="sidebar-jitter-badge"
+            class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#F59E0B]/20 text-[#F59E0B] animate-pulse"
+          >
+            ⏳ Jittering
+          </span>
+          <span
+            v-else
+            class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[#10B981]/20 text-[#10B981]"
+          >
             Active
           </span>
         </div>
-        <p class="text-[10px] text-[#64748B] leading-relaxed">
+
+        <div
+          v-if="queueStore.isJitterWaiting"
+          id="sidebar-jitter-countdown"
+          class="flex items-center justify-between p-1.5 rounded bg-[#0B111A] border border-[#F59E0B]/30 text-[11px]"
+        >
+          <span class="text-[#94A3B8]">Nghỉ an toàn:</span>
+          <span class="font-mono font-bold text-[#F59E0B] text-xs">
+            {{ queueStore.queueTick.formattedCountdown }}
+          </span>
+        </div>
+        <p v-else class="text-[10px] text-[#64748B] leading-relaxed">
           Động cơ Jitter ngẫu nhiên 180s–300s & giới hạn 30 bài/ngày bảo vệ tài khoản.
         </p>
       </div>
@@ -50,7 +71,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import {
   PenSquare,
   ListOrdered,
@@ -58,9 +79,16 @@ import {
   Settings
 } from 'lucide-vue-next'
 import { useNavigationStore, NavTab } from '../../stores/navigation'
+import { useQueueStore } from '../../stores/queue'
 
 const navStore = useNavigationStore()
+const queueStore = useQueueStore()
 const activeTab = computed(() => navStore.activeTab)
+
+onMounted(() => {
+  queueStore.initListeners()
+  queueStore.fetchJitterStatus()
+})
 
 interface NavItem {
   id: NavTab

@@ -30,10 +30,64 @@ export const useComposerStore = defineStore('composer', () => {
   const scheduledAt = ref<string>('')
   const isSubmitting = ref(false)
 
+  // Anti-ban Jitter & Daily Limit State (Story 4.2)
+  const minJitterSec = ref<number>(180)
+  const maxJitterSec = ref<number>(300)
+  const showDailyLimitModal = ref<boolean>(false)
+  const dailyLimitData = ref<{
+    currentCount: number
+    incomingCount: number
+    totalCount: number
+    exceedsLimit: boolean
+    threshold: number
+  } | null>(null)
+  const dontRemindToday = ref<boolean>(false)
+
   const isValid = computed(() => spintaxError.value === null)
   const hasMedia = computed(() => mediaFiles.value.length > 0)
   const coverPhoto = computed(() => (mediaFiles.value.length > 0 ? mediaFiles.value[0] : null))
   const selectedTargetsCount = computed(() => selectedTargetIds.value.length)
+
+  function getTodayKey(): string {
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = String(now.getMonth() + 1).padStart(2, '0')
+    const d = String(now.getDate()).padStart(2, '0')
+    return `fb_pulse_suppress_daily_warning_${y}-${m}-${d}`
+  }
+
+  function isDailyWarningSuppressed(): boolean {
+    try {
+      return localStorage.getItem(getTodayKey()) === 'true'
+    } catch {
+      return false
+    }
+  }
+
+  function suppressDailyWarning(): void {
+    try {
+      localStorage.setItem(getTodayKey(), 'true')
+    } catch {
+      // ignore
+    }
+  }
+
+  function setMinJitter(val: number): void {
+    const clamped = Math.max(60, Number(val) || 60)
+    minJitterSec.value = clamped
+    if (maxJitterSec.value < clamped) {
+      maxJitterSec.value = clamped
+    }
+  }
+
+  function setMaxJitter(val: number): void {
+    const clamped = Math.max(minJitterSec.value, Number(val) || minJitterSec.value)
+    maxJitterSec.value = clamped
+  }
+
+  function closeDailyLimitModal(): void {
+    showDailyLimitModal.value = false
+  }
 
   function setContent(newContent: string): void {
     content.value = newContent
@@ -292,7 +346,7 @@ export const useComposerStore = defineStore('composer', () => {
     return selectedTargetIds.value.includes(id)
   }
 
-  async function createCampaign(): Promise<{ success: boolean; error?: string }> {
+  async function createCampaign(bypassDailyWarning = false): Promise<{ success: boolean; error?: string; warningModalOpened?: boolean }> {
     if (!content.value.trim()) {
       const msg = 'Vui lòng nhập nội dung bài viết'
       toastStore.showToast(msg, 'warning')
@@ -309,6 +363,22 @@ export const useComposerStore = defineStore('composer', () => {
       const msg = 'Vui lòng chọn ít nhất 1 nhóm đích'
       toastStore.showToast(msg, 'warning')
       return { success: false, error: msg }
+    }
+
+    // Kiểm tra cảnh báo ngưỡng an toàn 30 bài / 24 giờ (Story 4.2)
+    if (!bypassDailyWarning && !isDailyWarningSuppressed()) {
+      if (window?.fbPulseAPI?.composer?.checkDailyLimit) {
+        try {
+          const checkRes = await window.fbPulseAPI.composer.checkDailyLimit(selectedTargetIds.value.length)
+          if (checkRes.success && checkRes.data?.exceedsLimit) {
+            dailyLimitData.value = checkRes.data
+            showDailyLimitModal.value = true
+            return { success: false, warningModalOpened: true }
+          }
+        } catch (err) {
+          console.error('[ComposerStore] Lỗi kiểm tra ngưỡng 30 bài:', err)
+        }
+      }
     }
 
     let isoScheduledAt: string | undefined = undefined
@@ -339,7 +409,9 @@ export const useComposerStore = defineStore('composer', () => {
             .filter((p): p is string => Boolean(p)),
           targetIds: [...selectedTargetIds.value],
           scheduleMode: scheduleMode.value,
-          scheduledAt: isoScheduledAt
+          scheduledAt: isoScheduledAt,
+          minJitterSec: minJitterSec.value,
+          maxJitterSec: maxJitterSec.value
         })
 
         if (res.success && res.data) {
@@ -397,6 +469,16 @@ export const useComposerStore = defineStore('composer', () => {
     selectAllTargets,
     clearSelectedTargets,
     isTargetSelected,
-    createCampaign
+    createCampaign,
+    minJitterSec,
+    maxJitterSec,
+    showDailyLimitModal,
+    dailyLimitData,
+    dontRemindToday,
+    setMinJitter,
+    setMaxJitter,
+    closeDailyLimitModal,
+    suppressDailyWarning,
+    isDailyWarningSuppressed
   }
 })

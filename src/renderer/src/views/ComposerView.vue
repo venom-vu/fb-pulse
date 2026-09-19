@@ -85,6 +85,82 @@
       </div>
     </div>
 
+    <!-- Modal Cảnh Báo Ngưỡng An Toàn 30 Bài/Ngày (Story 4.2) -->
+    <div
+      v-if="composerStore.showDailyLimitModal"
+      id="daily-limit-warning-modal"
+      class="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in"
+      role="dialog"
+      aria-labelledby="daily-limit-modal-title"
+    >
+      <div class="bg-[#131B26] border-2 border-[#F59E0B] rounded-xl max-w-lg w-full p-6 space-y-4 shadow-[0_0_30px_rgba(245,158,11,0.25)]">
+        <div class="flex items-start space-x-3.5 border-b border-[#1E293B] pb-4">
+          <div class="w-10 h-10 rounded-full bg-[#F59E0B]/20 border border-[#F59E0B]/50 flex items-center justify-center text-[#F59E0B] text-xl shrink-0">
+            ⚠️
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center space-x-2">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#F59E0B] text-[#0B111A]">
+                Cảnh báo tư vấn an toàn
+              </span>
+              <span class="text-xs text-[#94A3B8]">Ngưỡng khuyến nghị Meta: 30 bài / 24h</span>
+            </div>
+            <h3 id="daily-limit-modal-title" class="text-sm font-bold text-[#F1F5F9] mt-1">
+              Tổng số bài đăng trong 24 giờ sẽ vượt quá 30 bài!
+            </h3>
+          </div>
+        </div>
+
+        <div class="text-xs space-y-2.5 text-[#CBD5E1] bg-[#0B111A] p-3.5 rounded-lg border border-[#1E293B]">
+          <div class="flex items-center justify-between">
+            <span class="text-[#94A3B8]">Số bài đã lên lịch / đăng trong 24h qua:</span>
+            <strong class="font-mono text-[#F1F5F9]">{{ composerStore.dailyLimitData?.currentCount ?? 0 }} bài</strong>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-[#94A3B8]">Số bài trong chiến dịch sắp tạo:</span>
+            <strong class="font-mono text-[#10B981]">+{{ composerStore.dailyLimitData?.incomingCount ?? composerStore.selectedTargetsCount }} bài</strong>
+          </div>
+          <div class="flex items-center justify-between border-t border-[#1E293B] pt-2 text-[#F59E0B]">
+            <span class="font-semibold">Tổng số bài dự kiến trong 24 giờ:</span>
+            <strong class="font-mono text-sm">{{ composerStore.dailyLimitData?.totalCount ?? 0 }} / 30 bài</strong>
+          </div>
+        </div>
+
+        <p class="text-xs text-[#94A3B8] leading-relaxed">
+          Việc đăng quá 30 bài trong vòng 24 giờ có thể kích hoạt cơ chế kiểm duyệt tự động của Facebook, làm tăng rủi ro tài khoản bị yêu cầu checkpoint hoặc tạm khóa tính năng đăng bài nhóm.
+        </p>
+
+        <div class="flex items-center space-x-2 pt-1 select-none">
+          <input
+            id="dont-remind-checkbox"
+            v-model="composerStore.dontRemindToday"
+            type="checkbox"
+            class="accent-[#F59E0B] w-4 h-4 cursor-pointer"
+          />
+          <label for="dont-remind-checkbox" class="text-xs text-[#CBD5E1] cursor-pointer">
+            Không nhắc lại cảnh báo này trong ngày hôm nay
+          </label>
+        </div>
+
+        <div class="flex items-center justify-end space-x-3 pt-2">
+          <button
+            id="btn-cancel-daily-warning"
+            class="px-4 py-2 rounded-lg bg-[#0B111A] hover:bg-[#1E293B] text-[#94A3B8] hover:text-[#F1F5F9] text-xs font-medium border border-[#1E293B] transition-all cursor-pointer"
+            @click="composerStore.closeDailyLimitModal()"
+          >
+            Hủy bỏ & Điều chỉnh
+          </button>
+          <button
+            id="btn-confirm-risk-and-proceed"
+            class="px-4 py-2 rounded-lg bg-[#F59E0B] hover:bg-[#D97706] text-[#0B111A] text-xs font-bold transition-all shadow-[0_2px_10px_rgba(245,158,11,0.3)] cursor-pointer"
+            @click="handleConfirmRiskAndProceed"
+          >
+            Tôi đã hiểu rủi ro & Tiếp tục
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 2-Panel Split Studio Layout -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- Left Panel: Khung Soạn Thảo Spintax -->
@@ -244,6 +320,54 @@
             />
           </div>
 
+          <!-- Anti-ban Jitter Configuration (Story 4.2) -->
+          <div class="p-3.5 rounded-lg bg-[#0B111A] border border-[#1E293B] space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                <span class="text-xs font-semibold text-[#F1F5F9]">🛡️ Động Cơ Anti-ban Jitter</span>
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#10B981]/20 text-[#10B981]">
+                  {{ composerStore.minJitterSec }}s – {{ composerStore.maxJitterSec }}s
+                </span>
+              </div>
+              <span class="text-[10px] text-[#64748B] font-mono">Tối thiểu 60s</span>
+            </div>
+
+            <p class="text-[11px] text-[#94A3B8] leading-relaxed">
+              Tự động áp dụng khoảng nghỉ ngẫu nhiên an toàn giữa các bài đăng liên tiếp để bảo vệ tài khoản khỏi thuật toán chống bot của Facebook.
+            </p>
+
+            <div class="grid grid-cols-2 gap-3 pt-1">
+              <div>
+                <label class="block text-[10px] font-medium text-[#94A3B8] mb-1">
+                  Nghỉ tối thiểu (giây):
+                </label>
+                <input
+                  id="min-jitter-input"
+                  type="number"
+                  min="60"
+                  step="10"
+                  :value="composerStore.minJitterSec"
+                  @input="handleMinJitterChange"
+                  class="w-full rounded-md bg-[#131B26] border border-[#1E293B] focus:border-[#10B981] px-2.5 py-1.5 text-xs font-mono text-[#F1F5F9] outline-none"
+                />
+              </div>
+              <div>
+                <label class="block text-[10px] font-medium text-[#94A3B8] mb-1">
+                  Nghỉ tối đa (giây):
+                </label>
+                <input
+                  id="max-jitter-input"
+                  type="number"
+                  :min="composerStore.minJitterSec"
+                  step="10"
+                  :value="composerStore.maxJitterSec"
+                  @input="handleMaxJitterChange"
+                  class="w-full rounded-md bg-[#131B26] border border-[#1E293B] focus:border-[#10B981] px-2.5 py-1.5 text-xs font-mono text-[#F1F5F9] outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
           <!-- CTA Button: ⚡ Lên lịch chiến dịch -->
           <button
             id="btn-launch-campaign"
@@ -351,6 +475,24 @@ function handleInsertSpintax(): void {
 
 async function handleTestSpintax(): Promise<void> {
   await composerStore.testSpintaxVariant()
+}
+
+function handleMinJitterChange(event: Event): void {
+  const target = event.target as HTMLInputElement
+  composerStore.setMinJitter(Number(target.value))
+}
+
+function handleMaxJitterChange(event: Event): void {
+  const target = event.target as HTMLInputElement
+  composerStore.setMaxJitter(Number(target.value))
+}
+
+async function handleConfirmRiskAndProceed(): Promise<void> {
+  if (composerStore.dontRemindToday) {
+    composerStore.suppressDailyWarning()
+  }
+  composerStore.closeDailyLimitModal()
+  await composerStore.createCampaign(true)
 }
 
 async function handleLaunchCampaign(): Promise<void> {
