@@ -14,9 +14,13 @@ const api: FBPulseAPI = {
     list: () => ipcRenderer.invoke('targets:list'),
     syncFromFacebook: () => ipcRenderer.invoke('targets:sync-from-facebook'),
     createFolder: (name: string) => ipcRenderer.invoke('targets:create-folder', name),
+    updateFolder: (folderId: string, name: string) => ipcRenderer.invoke('targets:update-folder', folderId, name),
+    deleteFolder: (folderId: string) => ipcRenderer.invoke('targets:delete-folder', folderId),
     listFolders: () => ipcRenderer.invoke('targets:list-folders'),
     assignToFolder: (targetId: string, folderId: string | null) =>
-      ipcRenderer.invoke('targets:assign-to-folder', targetId, folderId)
+      ipcRenderer.invoke('targets:assign-to-folder', targetId, folderId),
+    batchAssignToFolder: (targetIds: string[], folderId: string | null) =>
+      ipcRenderer.invoke('targets:batch-assign-to-folder', targetIds, folderId)
   },
   queue: {
     resumeAuthPaused: () => ipcRenderer.invoke('queue:resume-auth-paused'),

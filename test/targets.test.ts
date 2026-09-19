@@ -207,4 +207,114 @@ describe('Story 2.1: Target Database & Facebook Group Synchronization Matrix', (
       expect(targets).toHaveLength(1)
     })
   })
+
+  describe('Story 2.2: Target Folders Management & Assignment Matrix', () => {
+    it('Matrix Row 1: creates a new folder successfully with trimmed name and account_id', () => {
+      const folder = targetService.createFolder('  Nhóm Rao Vặt Hà Nội  ')
+      expect(folder.id).toBeDefined()
+      expect(folder.name).toBe('Nhóm Rao Vặt Hà Nội')
+      expect(folder.account_id).toBe('primary_account')
+
+      const folders = targetService.listFolders('primary_account')
+      expect(folders).toHaveLength(1)
+      expect(folders[0].name).toBe('Nhóm Rao Vặt Hà Nội')
+    })
+
+    it('Matrix Row 2: rejects empty or whitespace-only folder name on create', () => {
+      expect(() => targetService.createFolder('')).toThrow('Tên thư mục không được để trống')
+      expect(() => targetService.createFolder('   ')).toThrow('Tên thư mục không được để trống')
+      // @ts-ignore
+      expect(() => targetService.createFolder(null)).toThrow('Tên thư mục không được để trống')
+    })
+
+    it('Matrix Row 3: updates folder name and rejects empty name on update', () => {
+      const folder = targetService.createFolder('Tên Cũ')
+      const updated = targetService.updateFolder(folder.id, 'Tên Mới Đã Đổi')
+      expect(updated.name).toBe('Tên Mới Đã Đổi')
+
+      const folders = targetService.listFolders()
+      expect(folders[0].name).toBe('Tên Mới Đã Đổi')
+
+      expect(() => targetService.updateFolder(folder.id, '  ')).toThrow('Tên thư mục không được để trống')
+      expect(() => targetService.updateFolder('non_existent_folder_id', 'Valid Name')).toThrow(
+        'Thư mục không tồn tại hoặc không thể cập nhật'
+      )
+    })
+
+    it('Matrix Row 4: deleting a folder sets targets folder_id to NULL and preserves targets in DB', () => {
+      const folder = targetService.createFolder('Thư Mục Xóa Thử Nghiệm')
+
+      // Tạo 3 nhóm và gán vào thư mục này
+      for (let i = 1; i <= 3; i++) {
+        db.prepare(`
+          INSERT INTO targets (id, account_id, folder_id, fb_id, name, type, privacy)
+          VALUES (?, 'primary_account', ?, ?, ?, 'group', 'public')
+        `).run(`target_test_${i}`, folder.id, `fb_${i}`, `Nhóm ${i}`)
+      }
+
+      let targetsInFolder = targetService.listTargets().filter((t) => t.folder_id === folder.id)
+      expect(targetsInFolder).toHaveLength(3)
+
+      // Xóa thư mục
+      targetService.deleteFolder(folder.id)
+
+      // Kiểm tra thư mục đã bị xóa
+      const folders = targetService.listFolders()
+      expect(folders.find((f) => f.id === folder.id)).toBeUndefined()
+
+      // Kiểm tra 3 nhóm vẫn còn nguyên trong DB nhưng folder_id đã thành NULL (Chưa phân loại)
+      const allTargets = targetService.listTargets()
+      expect(allTargets).toHaveLength(3)
+      for (const target of allTargets) {
+        expect(target.folder_id).toBeNull()
+      }
+    })
+
+    it('Matrix Row 5 & 7: assigns single target to folder and unassigns with null', () => {
+      const folder = targetService.createFolder('Mẹ & Bé')
+      const targetId = 'target_assign_single'
+      db.prepare(`
+        INSERT INTO targets (id, account_id, fb_id, name, type, privacy)
+        VALUES (?, 'primary_account', 'fb_single', 'Nhóm Đơn Lẻ', 'group', 'public')
+      `).run(targetId)
+
+      // Gán vào folder
+      targetService.assignToFolder(targetId, folder.id)
+      let target = targetService.listTargets().find((t) => t.id === targetId)
+      expect(target?.folder_id).toBe(folder.id)
+
+      // Gỡ khỏi folder
+      targetService.assignToFolder(targetId, null)
+      target = targetService.listTargets().find((t) => t.id === targetId)
+      expect(target?.folder_id).toBeNull()
+    })
+
+    it('Matrix Row 6: batch assigns multiple targets to folder in a single operation', () => {
+      const folder = targetService.createFolder('Bất Động Sản')
+      const targetIds = ['target_batch_1', 'target_batch_2', 'target_batch_3']
+
+      for (const id of targetIds) {
+        db.prepare(`
+          INSERT INTO targets (id, account_id, fb_id, name, type, privacy)
+          VALUES (?, 'primary_account', ?, 'Nhóm BĐS', 'group', 'public')
+        `).run(id, id)
+      }
+
+      // Batch assign
+      targetService.batchAssignToFolder(targetIds, folder.id)
+
+      const targets = targetService.listTargets().filter((t) => targetIds.includes(t.id))
+      expect(targets).toHaveLength(3)
+      for (const target of targets) {
+        expect(target.folder_id).toBe(folder.id)
+      }
+
+      // Batch unassign
+      targetService.batchAssignToFolder(targetIds, null)
+      const unassignedTargets = targetService.listTargets().filter((t) => targetIds.includes(t.id))
+      for (const target of unassignedTargets) {
+        expect(target.folder_id).toBeNull()
+      }
+    })
+  })
 })

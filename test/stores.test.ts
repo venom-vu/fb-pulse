@@ -386,6 +386,105 @@ describe('Pinia Stores & Navigation Matrix Verification', () => {
     expect(targetsStore.syncSuccessMessage).toContain('10 nhóm')
     expect(targetsStore.isSyncing).toBe(false)
   })
+
+  it('Targets Store (Story 2.2): folder CRUD, filtering, counts, and batch assign', async () => {
+    const targetsStore = useTargetsStore()
+
+    // @ts-ignore
+    global.window = {
+      fbPulseAPI: {
+        targets: {
+          createFolder: async (name: string) => ({
+            success: true,
+            data: { id: 'folder_1', account_id: 'primary_account', name }
+          }),
+          updateFolder: async (folderId: string, name: string) => ({
+            success: true,
+            data: { id: folderId, account_id: 'primary_account', name }
+          }),
+          deleteFolder: async (_folderId: string) => ({
+            success: true
+          }),
+          assignToFolder: async (_targetId: string, _folderId: string | null) => ({
+            success: true
+          }),
+          batchAssignToFolder: async (_targetIds: string[], _folderId: string | null) => ({
+            success: true
+          })
+        }
+      }
+    }
+
+    // 1. Tạo folder
+    const created = await targetsStore.createFolder('Nhóm Đồ Công Nghệ')
+    expect(created).not.toBeNull()
+    expect(created?.name).toBe('Nhóm Đồ Công Nghệ')
+    expect(targetsStore.folders).toHaveLength(1)
+
+    // 2. Cập nhật folder
+    const updated = await targetsStore.updateFolder('folder_1', 'Cộng Đồng Công Nghệ VN')
+    expect(updated?.name).toBe('Cộng Đồng Công Nghệ VN')
+    expect(targetsStore.folders[0].name).toBe('Cộng Đồng Công Nghệ VN')
+
+    // 3. Chuẩn bị targets test
+    targetsStore.targets = [
+      {
+        id: 't1',
+        account_id: 'primary_account',
+        folder_id: null,
+        fb_id: 'fb1',
+        name: 'Nhóm 1',
+        type: 'group',
+        privacy: 'public',
+        avatar_url: null,
+        last_synced_at: null
+      },
+      {
+        id: 't2',
+        account_id: 'primary_account',
+        folder_id: null,
+        fb_id: 'fb2',
+        name: 'Nhóm 2',
+        type: 'group',
+        privacy: 'private',
+        avatar_url: null,
+        last_synced_at: null
+      }
+    ]
+
+    expect(targetsStore.unassignedCount).toBe(2)
+    expect(targetsStore.folderCounts['folder_1']).toBe(0)
+
+    // 4. Batch assign t1 và t2 vào folder_1
+    const batchOk = await targetsStore.batchAssignToFolder(['t1', 't2'], 'folder_1')
+    expect(batchOk).toBe(true)
+    expect(targetsStore.targets[0].folder_id).toBe('folder_1')
+    expect(targetsStore.targets[1].folder_id).toBe('folder_1')
+    expect(targetsStore.unassignedCount).toBe(0)
+    expect(targetsStore.folderCounts['folder_1']).toBe(2)
+
+    // 5. Lọc theo folder
+    targetsStore.selectedFolderId = 'folder_1'
+    expect(targetsStore.filteredTargets).toHaveLength(2)
+
+    targetsStore.selectedFolderId = 'unassigned'
+    expect(targetsStore.filteredTargets).toHaveLength(0)
+
+    // 6. Gán đơn lẻ t2 về null
+    await targetsStore.assignToFolder('t2', null)
+    expect(targetsStore.targets[1].folder_id).toBeNull()
+    expect(targetsStore.unassignedCount).toBe(1)
+    expect(targetsStore.folderCounts['folder_1']).toBe(1)
+
+    // 7. Xóa folder
+    targetsStore.selectedFolderId = 'folder_1'
+    const delOk = await targetsStore.deleteFolder('folder_1')
+    expect(delOk).toBe(true)
+    expect(targetsStore.folders).toHaveLength(0)
+    // Target t1 từng ở folder_1 giờ đã được reset về null
+    expect(targetsStore.targets[0].folder_id).toBeNull()
+    expect(targetsStore.selectedFolderId).toBeNull()
+  })
 })
 
 

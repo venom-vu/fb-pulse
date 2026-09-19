@@ -11,6 +11,17 @@
 
       <div class="flex items-center space-x-3">
         <button
+          id="btn-create-folder"
+          class="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-[#1E293B] hover:bg-[#334155] text-[#F1F5F9] text-xs font-semibold border border-[#334155] transition-all duration-150"
+          @click="openCreateFolderModal"
+        >
+          <svg class="w-3.5 h-3.5 text-[#10B981]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+          <span>Tạo Thư Mục</span>
+        </button>
+
+        <button
           id="btn-sync-targets"
           :disabled="targetsStore.isSyncing || !isConnected"
           class="flex items-center space-x-2 px-3.5 py-2 rounded-lg bg-[#10B981] hover:bg-[#059669] disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold shadow-lg shadow-[#10B981]/20 transition-all duration-150"
@@ -102,7 +113,7 @@
     </div>
 
     <!-- Stats & Quick Overview -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
       <div class="bg-[#131B26] border border-[#1E293B] rounded-xl p-4 flex items-center space-x-3.5">
         <div class="w-10 h-10 rounded-lg bg-[#10B981]/15 border border-[#10B981]/30 flex items-center justify-center text-[#10B981]">
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -124,9 +135,23 @@
           </svg>
         </div>
         <div>
-          <div class="text-[11px] font-medium text-[#94A3B8]">Tổng số nhóm đã tham gia</div>
+          <div class="text-[11px] font-medium text-[#94A3B8]">Tổng số nhóm</div>
           <div class="text-base font-bold text-[#F1F5F9]">
             {{ targetsStore.totalGroupsCount }} <span class="text-xs font-normal text-[#94A3B8]">nhóm</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-[#131B26] border border-[#1E293B] rounded-xl p-4 flex items-center space-x-3.5">
+        <div class="w-10 h-10 rounded-lg bg-[#F59E0B]/15 border border-[#F59E0B]/30 flex items-center justify-center text-[#F59E0B]">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+          </svg>
+        </div>
+        <div>
+          <div class="text-[11px] font-medium text-[#94A3B8]">Thư mục phân loại</div>
+          <div class="text-base font-bold text-[#F1F5F9]">
+            {{ targetsStore.folders.length }} <span class="text-xs font-normal text-[#94A3B8]">thư mục</span>
           </div>
         </div>
       </div>
@@ -143,6 +168,88 @@
             <span class="w-2 h-2 rounded-full bg-[#10B981]"></span>
             <span>SQLite WAL</span>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Folder Tabs Bar -->
+    <div class="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-thin">
+      <!-- All Tab -->
+      <button
+        class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap"
+        :class="targetsStore.selectedFolderId === null
+          ? 'bg-[#10B981] text-white shadow-sm shadow-[#10B981]/20'
+          : 'bg-[#131B26] text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#1E293B] border border-[#1E293B]'"
+        @click="targetsStore.selectedFolderId = null"
+      >
+        <span>Tất cả</span>
+        <span
+          class="px-1.5 py-0.2 rounded-full text-[10px]"
+          :class="targetsStore.selectedFolderId === null ? 'bg-white/20 text-white' : 'bg-[#1E293B] text-[#94A3B8]'"
+        >
+          {{ targetsStore.totalTargetsCount }}
+        </span>
+      </button>
+
+      <!-- Unassigned Tab -->
+      <button
+        class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap"
+        :class="targetsStore.selectedFolderId === 'unassigned'
+          ? 'bg-[#10B981] text-white shadow-sm shadow-[#10B981]/20'
+          : 'bg-[#131B26] text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#1E293B] border border-[#1E293B]'"
+        @click="targetsStore.selectedFolderId = 'unassigned'"
+      >
+        <span>Chưa phân loại</span>
+        <span
+          class="px-1.5 py-0.2 rounded-full text-[10px]"
+          :class="targetsStore.selectedFolderId === 'unassigned' ? 'bg-white/20 text-white' : 'bg-[#1E293B] text-[#94A3B8]'"
+        >
+          {{ targetsStore.unassignedCount }}
+        </span>
+      </button>
+
+      <!-- Custom Folder Tabs -->
+      <div
+        v-for="folder in targetsStore.folders"
+        :key="folder.id"
+        class="group flex items-center rounded-lg border transition-all whitespace-nowrap"
+        :class="targetsStore.selectedFolderId === folder.id
+          ? 'bg-[#10B981] text-white border-[#10B981] shadow-sm shadow-[#10B981]/20'
+          : 'bg-[#131B26] text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#1E293B] border-[#1E293B]'"
+      >
+        <button
+          class="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium"
+          @click="targetsStore.selectedFolderId = folder.id"
+        >
+          <span>{{ folder.name }}</span>
+          <span
+            class="px-1.5 py-0.2 rounded-full text-[10px]"
+            :class="targetsStore.selectedFolderId === folder.id ? 'bg-white/20 text-white' : 'bg-[#1E293B] text-[#94A3B8]'"
+          >
+            {{ targetsStore.folderCounts[folder.id] || 0 }}
+          </span>
+        </button>
+
+        <!-- Folder Actions (Edit / Delete) -->
+        <div class="pr-1.5 flex items-center space-x-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
+          <button
+            class="p-1 hover:bg-black/20 rounded transition-colors"
+            title="Đổi tên thư mục"
+            @click.stop="openEditFolderModal(folder)"
+          >
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+          </button>
+          <button
+            class="p-1 hover:bg-black/20 rounded transition-colors text-red-400 hover:text-red-300"
+            title="Xóa thư mục"
+            @click.stop="openDeleteFolderModal(folder)"
+          >
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
         </div>
       </div>
     </div>
@@ -180,6 +287,57 @@
       </div>
     </div>
 
+    <!-- Bulk Action Bar (Floating / Prominent when targets selected) -->
+    <div
+      v-if="selectedTargetIds.length > 0"
+      class="bg-[#162130] border border-[#3B82F6]/40 rounded-xl p-3 px-4 flex items-center justify-between shadow-lg shadow-[#0B111A]/50 transition-all duration-200"
+    >
+      <div class="flex items-center space-x-3">
+        <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#3B82F6] text-white text-xs font-bold">
+          {{ selectedTargetIds.length }}
+        </span>
+        <span class="text-xs font-medium text-[#F1F5F9]">
+          Đã chọn {{ selectedTargetIds.length }} nhóm mục tiêu
+        </span>
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <div class="flex items-center space-x-2">
+          <label class="text-xs text-[#94A3B8]">Gán vào:</label>
+          <select
+            v-model="bulkFolderTargetId"
+            class="bg-[#0E1520] border border-[#1E293B] rounded-lg px-3 py-1.5 text-xs text-[#F1F5F9] focus:outline-none focus:border-[#10B981]"
+          >
+            <option value="">-- Chọn thư mục --</option>
+            <option value="__unassign__">Gỡ khỏi thư mục (Chưa phân loại)</option>
+            <option
+              v-for="folder in targetsStore.folders"
+              :key="folder.id"
+              :value="folder.id"
+            >
+              {{ folder.name }}
+            </option>
+          </select>
+          <button
+            :disabled="!bulkFolderTargetId"
+            class="px-3 py-1.5 rounded-lg bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors"
+            @click="handleBulkAssign"
+          >
+            Áp dụng
+          </button>
+        </div>
+
+        <div class="h-4 w-[1px] bg-[#1E293B]"></div>
+
+        <button
+          class="text-xs text-[#94A3B8] hover:text-[#F1F5F9] transition-colors"
+          @click="selectedTargetIds = []"
+        >
+          Bỏ chọn
+        </button>
+      </div>
+    </div>
+
     <!-- Targets List / Table -->
     <div class="bg-[#131B26] border border-[#1E293B] rounded-xl overflow-hidden flex-1">
       <!-- Loading State -->
@@ -212,7 +370,7 @@
         v-else-if="targetsStore.filteredTargets.length === 0"
         class="p-8 text-center text-xs text-[#94A3B8]"
       >
-        Không tìm thấy nhóm nào khớp với từ khóa "{{ targetsStore.searchQuery }}".
+        Không tìm thấy nhóm nào khớp với bộ lọc hiện tại.
       </div>
 
       <!-- Compact Target Table -->
@@ -220,7 +378,16 @@
         <table class="w-full text-left border-collapse">
           <thead>
             <tr class="border-b border-[#1E293B] bg-[#0E1520]/60 text-[11px] font-semibold text-[#64748B] uppercase tracking-wider">
+              <th class="py-2.5 px-4 w-10">
+                <input
+                  type="checkbox"
+                  class="rounded bg-[#1E293B] border-[#334155] text-[#10B981] focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                  :checked="isAllSelected"
+                  @change="toggleSelectAll"
+                />
+              </th>
               <th class="py-2.5 px-4">Đích đăng</th>
+              <th class="py-2.5 px-4">Thư mục</th>
               <th class="py-2.5 px-4">Loại hình</th>
               <th class="py-2.5 px-4">Quyền riêng tư</th>
               <th class="py-2.5 px-4">Facebook ID</th>
@@ -232,8 +399,22 @@
               v-for="target in targetsStore.filteredTargets"
               :key="target.id"
               class="hover:bg-[#162130]/60 transition-colors"
-              :class="{ 'bg-[#10B981]/5': target.type === 'profile' }"
+              :class="{
+                'bg-[#10B981]/5': target.type === 'profile',
+                'bg-[#3B82F6]/5': selectedTargetIds.includes(target.id)
+              }"
             >
+              <!-- Checkbox -->
+              <td class="py-2.5 px-4">
+                <input
+                  v-if="target.type === 'group'"
+                  type="checkbox"
+                  class="rounded bg-[#1E293B] border-[#334155] text-[#10B981] focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                  :checked="selectedTargetIds.includes(target.id)"
+                  @change="toggleSelectTarget(target.id)"
+                />
+              </td>
+
               <!-- Name & Avatar -->
               <td class="py-2.5 px-4">
                 <div class="flex items-center space-x-3">
@@ -256,6 +437,23 @@
                     </div>
                   </div>
                 </div>
+              </td>
+
+              <!-- Folder Badge -->
+              <td class="py-2.5 px-4 whitespace-nowrap">
+                <span
+                  v-if="getFolderName(target.folder_id)"
+                  class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-medium bg-[#8B5CF6]/15 text-[#A78BFA] border border-[#8B5CF6]/30"
+                >
+                  <svg class="w-3 h-3 text-[#8B5CF6]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
+                  <span>{{ getFolderName(target.folder_id) }}</span>
+                </span>
+                <span v-else-if="target.type === 'group'" class="text-[11px] text-[#64748B]">
+                  Chưa phân loại
+                </span>
+                <span v-else class="text-[11px] text-[#64748B]">-</span>
               </td>
 
               <!-- Type Badge -->
@@ -304,18 +502,154 @@
         </table>
       </div>
     </div>
+
+    <!-- Modal: Tạo Thư Mục Mới -->
+    <div
+      v-if="showCreateFolderModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      @click.self="showCreateFolderModal = false"
+    >
+      <div class="bg-[#131B26] border border-[#1E293B] rounded-xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+        <h3 class="text-sm font-bold text-[#F1F5F9]">Tạo Thư Mục Đích Mới</h3>
+        <div>
+          <label class="block text-xs text-[#94A3B8] mb-1.5">Tên thư mục</label>
+          <input
+            v-model="newFolderName"
+            type="text"
+            placeholder="Ví dụ: Nhóm Rao Vặt Hà Nội"
+            class="w-full px-3 py-2 rounded-lg bg-[#0E1520] border border-[#1E293B] text-xs text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:border-[#10B981]"
+            @keyup.enter="handleCreateFolder"
+          />
+          <p v-if="folderError" class="text-[11px] text-red-400 mt-1">{{ folderError }}</p>
+        </div>
+
+        <div class="flex items-center justify-end space-x-2 pt-2">
+          <button
+            class="px-3 py-1.5 rounded-lg text-xs text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#1E293B] transition-colors"
+            @click="showCreateFolderModal = false"
+          >
+            Hủy
+          </button>
+          <button
+            class="px-4 py-1.5 rounded-lg bg-[#10B981] hover:bg-[#059669] text-white text-xs font-semibold transition-colors shadow-sm shadow-[#10B981]/20"
+            @click="handleCreateFolder"
+          >
+            Tạo Thư Mục
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Đổi Tên Thư Mục -->
+    <div
+      v-if="showEditFolderModal && editingFolder"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      @click.self="showEditFolderModal = false"
+    >
+      <div class="bg-[#131B26] border border-[#1E293B] rounded-xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+        <h3 class="text-sm font-bold text-[#F1F5F9]">Đổi Tên Thư Mục</h3>
+        <div>
+          <label class="block text-xs text-[#94A3B8] mb-1.5">Tên mới</label>
+          <input
+            v-model="editFolderName"
+            type="text"
+            class="w-full px-3 py-2 rounded-lg bg-[#0E1520] border border-[#1E293B] text-xs text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:border-[#10B981]"
+            @keyup.enter="handleUpdateFolder"
+          />
+          <p v-if="folderError" class="text-[11px] text-red-400 mt-1">{{ folderError }}</p>
+        </div>
+
+        <div class="flex items-center justify-end space-x-2 pt-2">
+          <button
+            class="px-3 py-1.5 rounded-lg text-xs text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#1E293B] transition-colors"
+            @click="showEditFolderModal = false"
+          >
+            Hủy
+          </button>
+          <button
+            class="px-4 py-1.5 rounded-lg bg-[#10B981] hover:bg-[#059669] text-white text-xs font-semibold transition-colors shadow-sm shadow-[#10B981]/20"
+            @click="handleUpdateFolder"
+          >
+            Lưu Thay Đổi
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Xác Nhận Xóa Thư Mục -->
+    <div
+      v-if="showDeleteFolderModal && deletingFolder"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      @click.self="showDeleteFolderModal = false"
+    >
+      <div class="bg-[#131B26] border border-[#1E293B] rounded-xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+        <div class="flex items-center space-x-3 text-red-400">
+          <svg class="w-6 h-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <h3 class="text-sm font-bold text-[#F1F5F9]">Xác Nhận Xóa Thư Mục</h3>
+        </div>
+
+        <p class="text-xs text-[#94A3B8]">
+          Bạn có chắc chắn muốn xóa thư mục <strong class="text-[#F1F5F9]">"{{ deletingFolder.name }}"</strong>?
+        </p>
+        <p class="text-[11px] text-[#64748B]">
+          * Lưu ý: Các nhóm thuộc thư mục này sẽ không bị xóa mà sẽ chuyển về trạng thái <em>Chưa phân loại</em>.
+        </p>
+
+        <div class="flex items-center justify-end space-x-2 pt-2">
+          <button
+            class="px-3 py-1.5 rounded-lg text-xs text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#1E293B] transition-colors"
+            @click="showDeleteFolderModal = false"
+          >
+            Hủy
+          </button>
+          <button
+            class="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold transition-colors"
+            @click="handleDeleteFolder"
+          >
+            Xóa Thư Mục
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useTargetsStore } from '../stores/targets'
 import { useAccountStore } from '../stores/account'
+import type { FolderDTO } from '../../../preload/types'
 
 const targetsStore = useTargetsStore()
 const accountStore = useAccountStore()
 
 const isConnected = computed(() => accountStore.account?.status === 'connected')
+
+// Checkbox selection state
+const selectedTargetIds = ref<string[]>([])
+const bulkFolderTargetId = ref<string>('')
+
+// Modal states
+const showCreateFolderModal = ref<boolean>(false)
+const newFolderName = ref<string>('')
+const folderError = ref<string | null>(null)
+
+const showEditFolderModal = ref<boolean>(false)
+const editingFolder = ref<FolderDTO | null>(null)
+const editFolderName = ref<string>('')
+
+const showDeleteFolderModal = ref<boolean>(false)
+const deletingFolder = ref<FolderDTO | null>(null)
+
+// Check if all group targets in filtered view are selected
+const isAllSelected = computed(() => {
+  const groupIds = targetsStore.filteredTargets
+    .filter((t) => t.type === 'group')
+    .map((t) => t.id)
+  return groupIds.length > 0 && groupIds.every((id) => selectedTargetIds.value.includes(id))
+})
 
 onMounted(async () => {
   await targetsStore.fetchTargets()
@@ -324,6 +658,104 @@ onMounted(async () => {
 
 async function handleSync(): Promise<void> {
   await targetsStore.syncTargets()
+}
+
+function getFolderName(folderId: string | null): string | null {
+  if (!folderId) return null
+  const folder = targetsStore.folders.find((f) => f.id === folderId)
+  return folder ? folder.name : null
+}
+
+function toggleSelectTarget(id: string): void {
+  const index = selectedTargetIds.value.indexOf(id)
+  if (index > -1) {
+    selectedTargetIds.value.splice(index, 1)
+  } else {
+    selectedTargetIds.value.push(id)
+  }
+}
+
+function toggleSelectAll(): void {
+  const groupIds = targetsStore.filteredTargets
+    .filter((t) => t.type === 'group')
+    .map((t) => t.id)
+
+  if (isAllSelected.value) {
+    selectedTargetIds.value = selectedTargetIds.value.filter((id) => !groupIds.includes(id))
+  } else {
+    const newSelected = new Set([...selectedTargetIds.value, ...groupIds])
+    selectedTargetIds.value = Array.from(newSelected)
+  }
+}
+
+async function handleBulkAssign(): Promise<void> {
+  if (!bulkFolderTargetId.value || selectedTargetIds.value.length === 0) return
+
+  const targetFolderId = bulkFolderTargetId.value === '__unassign__' ? null : bulkFolderTargetId.value
+  await targetsStore.batchAssignToFolder(selectedTargetIds.value, targetFolderId)
+  selectedTargetIds.value = []
+  bulkFolderTargetId.value = ''
+}
+
+function openCreateFolderModal(): void {
+  newFolderName.value = ''
+  folderError.value = null
+  showCreateFolderModal.value = true
+}
+
+async function handleCreateFolder(): Promise<void> {
+  const trimmed = newFolderName.value.trim()
+  if (!trimmed) {
+    folderError.value = 'Tên thư mục không được để trống'
+    return
+  }
+
+  const created = await targetsStore.createFolder(trimmed)
+  if (created) {
+    showCreateFolderModal.value = false
+    newFolderName.value = ''
+    folderError.value = null
+  } else {
+    folderError.value = 'Không thể tạo thư mục, vui lòng thử lại'
+  }
+}
+
+function openEditFolderModal(folder: FolderDTO): void {
+  editingFolder.value = folder
+  editFolderName.value = folder.name
+  folderError.value = null
+  showEditFolderModal.value = true
+}
+
+async function handleUpdateFolder(): Promise<void> {
+  if (!editingFolder.value) return
+  const trimmed = editFolderName.value.trim()
+  if (!trimmed) {
+    folderError.value = 'Tên thư mục không được để trống'
+    return
+  }
+
+  const updated = await targetsStore.updateFolder(editingFolder.value.id, trimmed)
+  if (updated) {
+    showEditFolderModal.value = false
+    editingFolder.value = null
+    editFolderName.value = ''
+    folderError.value = null
+  } else {
+    folderError.value = 'Không thể đổi tên thư mục, vui lòng thử lại'
+  }
+}
+
+function openDeleteFolderModal(folder: FolderDTO): void {
+  deletingFolder.value = folder
+  showDeleteFolderModal.value = true
+}
+
+async function handleDeleteFolder(): Promise<void> {
+  if (!deletingFolder.value) return
+  await targetsStore.deleteFolder(deletingFolder.value.id)
+  showDeleteFolderModal.value = false
+  deletingFolder.value = null
 }
 
 function formatDate(dateStr: string | null): string {

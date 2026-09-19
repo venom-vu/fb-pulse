@@ -64,9 +64,12 @@ export interface FBPulseAPI {
   targets: {
     list: () => Promise<IPCResult<TargetDTO[]>>
     syncFromFacebook: () => Promise<IPCResult<TargetSyncResultDTO>>
-    createFolder?: (name: string) => Promise<IPCResult<FolderDTO>>
-    listFolders?: () => Promise<IPCResult<FolderDTO[]>>
-    assignToFolder?: (targetId: string, folderId: string | null) => Promise<IPCResult<void>>
+    createFolder: (name: string) => Promise<IPCResult<FolderDTO>>
+    updateFolder: (folderId: string, name: string) => Promise<IPCResult<FolderDTO>>
+    deleteFolder: (folderId: string) => Promise<IPCResult<void>>
+    listFolders: () => Promise<IPCResult<FolderDTO[]>>
+    assignToFolder: (targetId: string, folderId: string | null) => Promise<IPCResult<void>>
+    batchAssignToFolder: (targetIds: string[], folderId: string | null) => Promise<IPCResult<void>>
   }
   queue: {
     resumeAuthPaused: () => Promise<IPCResult<{ resumedCount: number }>>

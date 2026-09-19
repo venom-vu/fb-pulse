@@ -303,6 +303,47 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   })
 
   ipcMain.handle(
+    'targets:update-folder',
+    async (_event, folderId: string, name: string): Promise<IPCResult<FolderDTO>> => {
+      try {
+        const folder = targetService.updateFolder(folderId, name)
+        return {
+          success: true,
+          data: folder
+        }
+      } catch (error: any) {
+        console.error('[IPC] targets:update-folder error:', error)
+        return {
+          success: false,
+          error: {
+            code: 'UPDATE_FOLDER_FAILED',
+            message: error?.message || 'Không thể cập nhật thư mục đích'
+          }
+        }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'targets:delete-folder',
+    async (_event, folderId: string): Promise<IPCResult<void>> => {
+      try {
+        targetService.deleteFolder(folderId)
+        return { success: true }
+      } catch (error: any) {
+        console.error('[IPC] targets:delete-folder error:', error)
+        return {
+          success: false,
+          error: {
+            code: 'DELETE_FOLDER_FAILED',
+            message: error?.message || 'Không thể xóa thư mục đích'
+          }
+        }
+      }
+    }
+  )
+
+  ipcMain.handle(
     'targets:assign-to-folder',
     async (_event, targetId: string, folderId: string | null): Promise<IPCResult<void>> => {
       try {
@@ -315,6 +356,25 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
           error: {
             code: 'ASSIGN_FOLDER_FAILED',
             message: error?.message || 'Không thể gán nhóm vào thư mục'
+          }
+        }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'targets:batch-assign-to-folder',
+    async (_event, targetIds: string[], folderId: string | null): Promise<IPCResult<void>> => {
+      try {
+        targetService.batchAssignToFolder(targetIds, folderId)
+        return { success: true }
+      } catch (error: any) {
+        console.error('[IPC] targets:batch-assign-to-folder error:', error)
+        return {
+          success: false,
+          error: {
+            code: 'BATCH_ASSIGN_FOLDER_FAILED',
+            message: error?.message || 'Không thể gán nhiều nhóm vào thư mục'
           }
         }
       }

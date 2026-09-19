@@ -17,6 +17,21 @@ export const useTargetsStore = defineStore('targets', () => {
   const groupTargets = computed(() => targets.value.filter((t) => t.type === 'group'))
   const totalTargetsCount = computed(() => targets.value.length)
   const totalGroupsCount = computed(() => groupTargets.value.length)
+  const unassignedCount = computed(
+    () => targets.value.filter((t) => !t.folder_id && t.type === 'group').length
+  )
+  const folderCounts = computed(() => {
+    const counts: Record<string, number> = {}
+    for (const folder of folders.value) {
+      counts[folder.id] = 0
+    }
+    for (const target of targets.value) {
+      if (target.folder_id && counts[target.folder_id] !== undefined) {
+        counts[target.folder_id]++
+      }
+    }
+    return counts
+  })
 
   const filteredTargets = computed(() => {
     let result = targets.value
@@ -112,6 +127,46 @@ export const useTargetsStore = defineStore('targets', () => {
     return null
   }
 
+  async function updateFolder(folderId: string, name: string): Promise<FolderDTO | null> {
+    if (!window.fbPulseAPI?.targets?.updateFolder) return null
+    try {
+      const res = await window.fbPulseAPI.targets.updateFolder(folderId, name)
+      if (res.success && res.data) {
+        const idx = folders.value.findIndex((f) => f.id === folderId)
+        if (idx !== -1) {
+          folders.value[idx] = res.data
+        }
+        return res.data
+      }
+    } catch (err) {
+      console.error('[TargetsStore] Failed to update folder:', err)
+    }
+    return null
+  }
+
+  async function deleteFolder(folderId: string): Promise<boolean> {
+    if (!window.fbPulseAPI?.targets?.deleteFolder) return false
+    try {
+      const res = await window.fbPulseAPI.targets.deleteFolder(folderId)
+      if (res.success) {
+        folders.value = folders.value.filter((f) => f.id !== folderId)
+        // Reset folder_id on targets
+        for (const target of targets.value) {
+          if (target.folder_id === folderId) {
+            target.folder_id = null
+          }
+        }
+        if (selectedFolderId.value === folderId) {
+          selectedFolderId.value = null
+        }
+        return true
+      }
+    } catch (err) {
+      console.error('[TargetsStore] Failed to delete folder:', err)
+    }
+    return false
+  }
+
   async function assignToFolder(targetId: string, folderId: string | null): Promise<boolean> {
     if (!window.fbPulseAPI?.targets?.assignToFolder) return false
     try {
@@ -125,6 +180,25 @@ export const useTargetsStore = defineStore('targets', () => {
       }
     } catch (err) {
       console.error('[TargetsStore] Failed to assign target to folder:', err)
+    }
+    return false
+  }
+
+  async function batchAssignToFolder(targetIds: string[], folderId: string | null): Promise<boolean> {
+    if (!window.fbPulseAPI?.targets?.batchAssignToFolder) return false
+    try {
+      const res = await window.fbPulseAPI.targets.batchAssignToFolder(targetIds, folderId)
+      if (res.success) {
+        const idSet = new Set(targetIds)
+        for (const target of targets.value) {
+          if (idSet.has(target.id)) {
+            target.folder_id = folderId
+          }
+        }
+        return true
+      }
+    } catch (err) {
+      console.error('[TargetsStore] Failed to batch assign targets to folder:', err)
     }
     return false
   }
@@ -143,11 +217,16 @@ export const useTargetsStore = defineStore('targets', () => {
     groupTargets,
     totalTargetsCount,
     totalGroupsCount,
+    unassignedCount,
+    folderCounts,
     filteredTargets,
     fetchTargets,
     fetchFolders,
     syncTargets,
     createFolder,
-    assignToFolder
+    updateFolder,
+    deleteFolder,
+    assignToFolder,
+    batchAssignToFolder
   }
 })

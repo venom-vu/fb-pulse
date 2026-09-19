@@ -120,6 +120,11 @@ export class TargetService {
    * Tạo thư mục đích mới.
    */
   public createFolder(name: string, accountId = 'primary_account'): FolderDTO {
+    const trimmed = name?.trim()
+    if (!trimmed) {
+      throw new Error('Tên thư mục không được để trống')
+    }
+
     const db = getDatabase()
     const id = `folder_${randomUUID().replace(/-/g, '').slice(0, 12)}`
 
@@ -127,22 +132,76 @@ export class TargetService {
       INSERT INTO target_folders (id, account_id, name, created_at)
       VALUES (?, ?, ?, CURRENT_TIMESTAMP)
     `)
-    stmt.run(id, accountId, name.trim())
+    stmt.run(id, accountId, trimmed)
 
     return {
       id,
       account_id: accountId,
-      name: name.trim()
+      name: trimmed
     }
+  }
+
+  /**
+   * Cập nhật tên thư mục đích.
+   */
+  public updateFolder(folderId: string, name: string, accountId = 'primary_account'): FolderDTO {
+    const trimmed = name?.trim()
+    if (!trimmed) {
+      throw new Error('Tên thư mục không được để trống')
+    }
+
+    const db = getDatabase()
+    const res = db
+      .prepare('UPDATE target_folders SET name = ? WHERE id = ? AND account_id = ?')
+      .run(trimmed, folderId, accountId)
+
+    if (res.changes === 0) {
+      throw new Error('Thư mục không tồn tại hoặc không thể cập nhật')
+    }
+
+    const row = db.prepare('SELECT * FROM target_folders WHERE id = ?').get(folderId) as any
+    return {
+      id: row.id,
+      account_id: row.account_id,
+      name: row.name,
+      created_at: row.created_at
+    }
+  }
+
+  /**
+   * Xóa thư mục đích và đặt folder_id của các targets thuộc thư mục về NULL.
+   */
+  public deleteFolder(folderId: string, accountId = 'primary_account'): void {
+    const db = getDatabase()
+    const deleteTx = db.transaction(() => {
+      db.prepare('UPDATE targets SET folder_id = NULL WHERE folder_id = ? AND account_id = ?').run(folderId, accountId)
+      db.prepare('DELETE FROM target_folders WHERE id = ? AND account_id = ?').run(folderId, accountId)
+    })
+    deleteTx()
   }
 
   /**
    * Gán hoặc hủy gán target vào thư mục.
    */
-  public assignToFolder(targetId: string, folderId: string | null): void {
+  public assignToFolder(targetId: string, folderId: string | null, accountId = 'primary_account'): void {
     const db = getDatabase()
-    const stmt = db.prepare('UPDATE targets SET folder_id = ? WHERE id = ?')
-    stmt.run(folderId, targetId)
+    const stmt = db.prepare('UPDATE targets SET folder_id = ? WHERE id = ? AND account_id = ?')
+    stmt.run(folderId, targetId, accountId)
+  }
+
+  /**
+   * Gán hoặc hủy gán nhiều target vào thư mục hàng loạt (Batch Assign).
+   */
+  public batchAssignToFolder(targetIds: string[], folderId: string | null, accountId = 'primary_account'): void {
+    if (!targetIds || targetIds.length === 0) return
+    const db = getDatabase()
+    const stmt = db.prepare('UPDATE targets SET folder_id = ? WHERE id = ? AND account_id = ?')
+    const batchTx = db.transaction((ids: string[]) => {
+      for (const id of ids) {
+        stmt.run(folderId, id, accountId)
+      }
+    })
+    batchTx(targetIds)
   }
 
   /**
