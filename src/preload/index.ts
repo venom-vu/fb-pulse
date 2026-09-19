@@ -10,6 +10,14 @@ const api: FBPulseAPI = {
     checkHealth: () => ipcRenderer.invoke('account:check-health'),
     triggerEmergencyPause: (reason?: string) => ipcRenderer.invoke('account:trigger-emergency-pause', reason)
   },
+  targets: {
+    list: () => ipcRenderer.invoke('targets:list'),
+    syncFromFacebook: () => ipcRenderer.invoke('targets:sync-from-facebook'),
+    createFolder: (name: string) => ipcRenderer.invoke('targets:create-folder', name),
+    listFolders: () => ipcRenderer.invoke('targets:list-folders'),
+    assignToFolder: (targetId: string, folderId: string | null) =>
+      ipcRenderer.invoke('targets:assign-to-folder', targetId, folderId)
+  },
   queue: {
     resumeAuthPaused: () => ipcRenderer.invoke('queue:resume-auth-paused'),
     getStatus: () => ipcRenderer.invoke('queue:get-status')

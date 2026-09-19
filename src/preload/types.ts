@@ -27,6 +27,31 @@ export interface IPCResult<T> {
   }
 }
 
+export interface TargetDTO {
+  id: string
+  account_id: string
+  folder_id: string | null
+  fb_id: string
+  name: string
+  type: 'profile' | 'group'
+  privacy: 'public' | 'private'
+  avatar_url: string | null
+  last_synced_at: string | null
+}
+
+export interface FolderDTO {
+  id: string
+  account_id: string
+  name: string
+  created_at?: string
+}
+
+export interface TargetSyncResultDTO {
+  targets: TargetDTO[]
+  syncedCount: number
+  profileTarget?: TargetDTO
+}
+
 export interface FBPulseAPI {
   account: {
     getProfile: () => Promise<IPCResult<AccountDTO | null>>
@@ -35,6 +60,13 @@ export interface FBPulseAPI {
     logout: () => Promise<IPCResult<void>>
     checkHealth: () => Promise<IPCResult<{ valid: boolean; reason?: string; isCheckpoint?: boolean }>>
     triggerEmergencyPause: (reason?: string) => Promise<IPCResult<AccountDTO>>
+  }
+  targets: {
+    list: () => Promise<IPCResult<TargetDTO[]>>
+    syncFromFacebook: () => Promise<IPCResult<TargetSyncResultDTO>>
+    createFolder?: (name: string) => Promise<IPCResult<FolderDTO>>
+    listFolders?: () => Promise<IPCResult<FolderDTO[]>>
+    assignToFolder?: (targetId: string, folderId: string | null) => Promise<IPCResult<void>>
   }
   queue: {
     resumeAuthPaused: () => Promise<IPCResult<{ resumedCount: number }>>

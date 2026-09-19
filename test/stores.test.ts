@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useNavigationStore } from '../src/renderer/src/stores/navigation'
 import { useAccountStore } from '../src/renderer/src/stores/account'
+import { useTargetsStore } from '../src/renderer/src/stores/targets'
 
 describe('Pinia Stores & Navigation Matrix Verification', () => {
   beforeEach(() => {
@@ -275,5 +276,116 @@ describe('Pinia Stores & Navigation Matrix Verification', () => {
     expect(res.resumedCount).toBe(3)
     expect(queueStore.isEmergencyPaused).toBe(false)
   })
+
+  it('Targets Store: fetches targets and calculates profile/group getters correctly', async () => {
+    const targetsStore = useTargetsStore()
+    expect(targetsStore.targets).toEqual([])
+    expect(targetsStore.isLoading).toBe(false)
+
+    // @ts-ignore
+    global.window = {
+      fbPulseAPI: {
+        targets: {
+          list: async () => ({
+            success: true,
+            data: [
+              {
+                id: 'target_primary_account_profile_1',
+                account_id: 'primary_account',
+                folder_id: null,
+                fb_id: 'profile_1',
+                name: 'Nguyễn Văn A',
+                type: 'profile',
+                privacy: 'public',
+                avatar_url: null,
+                last_synced_at: '2026-09-19T10:00:00Z'
+              },
+              {
+                id: 'target_primary_account_group_1',
+                account_id: 'primary_account',
+                folder_id: null,
+                fb_id: 'group_1',
+                name: 'Nhóm Công Nghệ',
+                type: 'group',
+                privacy: 'public',
+                avatar_url: null,
+                last_synced_at: '2026-09-19T10:00:00Z'
+              },
+              {
+                id: 'target_primary_account_group_2',
+                account_id: 'primary_account',
+                folder_id: 'folder_1',
+                fb_id: 'group_2',
+                name: 'Nhóm Mua Bán Kín',
+                type: 'group',
+                privacy: 'private',
+                avatar_url: null,
+                last_synced_at: '2026-09-19T10:00:00Z'
+              }
+            ]
+          }),
+          listFolders: async () => ({
+            success: true,
+            data: [{ id: 'folder_1', account_id: 'primary_account', name: 'Folder 1' }]
+          })
+        }
+      }
+    }
+
+    await targetsStore.fetchTargets()
+    await targetsStore.fetchFolders()
+
+    expect(targetsStore.totalTargetsCount).toBe(3)
+    expect(targetsStore.totalGroupsCount).toBe(2)
+    expect(targetsStore.profileTarget?.name).toBe('Nguyễn Văn A')
+    expect(targetsStore.groupTargets).toHaveLength(2)
+
+    // Lọc theo tìm kiếm
+    targetsStore.searchQuery = 'Công Nghệ'
+    expect(targetsStore.filteredTargets).toHaveLength(1)
+    expect(targetsStore.filteredTargets[0].name).toBe('Nhóm Công Nghệ')
+
+    targetsStore.searchQuery = ''
+    expect(targetsStore.filteredTargets).toHaveLength(3)
+  })
+
+  it('Targets Store: syncTargets updates state and handles success/error', async () => {
+    const targetsStore = useTargetsStore()
+
+    // @ts-ignore
+    global.window = {
+      fbPulseAPI: {
+        targets: {
+          syncFromFacebook: async () => ({
+            success: true,
+            data: {
+              targets: [
+                {
+                  id: 'target_primary_account_profile_1',
+                  account_id: 'primary_account',
+                  folder_id: null,
+                  fb_id: 'profile_1',
+                  name: 'Nguyễn Văn A',
+                  type: 'profile',
+                  privacy: 'public',
+                  avatar_url: null,
+                  last_synced_at: '2026-09-19T10:00:00Z'
+                }
+              ],
+              syncedCount: 10
+            }
+          })
+        }
+      }
+    }
+
+    const result = await targetsStore.syncTargets()
+    expect(result.success).toBe(true)
+    expect(result.count).toBe(10)
+    expect(targetsStore.lastSyncCount).toBe(10)
+    expect(targetsStore.syncSuccessMessage).toContain('10 nhóm')
+    expect(targetsStore.isSyncing).toBe(false)
+  })
 })
+
 
