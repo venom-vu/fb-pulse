@@ -1,6 +1,7 @@
 import { BrowserWindow, powerSaveBlocker } from 'electron'
 import { getDatabase } from '../database/connection'
 import { settingsService } from './settings.service'
+import { workerManager } from './worker-manager'
 import type { QueueTickDTO, TaskDTO, QueueFilterDTO, WakeupRecoveryDTO } from '../../preload/types'
 
 export class SchedulerService {
@@ -431,8 +432,11 @@ export class SchedulerService {
         permalink = res.permalink
         errorMessage = res.error
       } else {
-        // Mặc định cho giai đoạn Story 4.3 (khi chưa nối Playwright worker ở Epic 5)
-        success = true
+        // Thực thi qua Electron utilityProcess Worker độc lập (Story 5.1 / AD-1)
+        const res = await workerManager.executeTask(nextTask)
+        success = res.success
+        permalink = res.permalink
+        errorMessage = res.error
       }
     } catch (err: any) {
       success = false
@@ -493,6 +497,10 @@ export class SchedulerService {
     } else {
       this.status = 'idle'
       this.broadcastTick()
+      // Giải phóng hoàn toàn tiến trình Worker khi hàng đợi rảnh (Story 5.1 / AD-1)
+      workerManager.terminateWorker().catch((err) => {
+        console.error('[SchedulerService] Lỗi khi giải phóng worker:', err)
+      })
     }
 
     this.updatePowerSaveBlocker()
@@ -512,6 +520,8 @@ export class SchedulerService {
     this.isProcessing = false
     this.taskExecutor = null
     this.onCompleteCallback = null
+
+    workerManager.terminateWorker().catch(() => {})
 
     if (this.powerSaveBlockerId !== null) {
       try {

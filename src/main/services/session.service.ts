@@ -21,6 +21,7 @@ export interface StoredSessionPayload {
     httpOnly?: boolean
     sameSite?: 'unspecified' | 'no_restriction' | 'lax' | 'strict'
     expirationDate?: number
+    expires?: number
   }>
   lastSyncedAt: string
 }
@@ -344,6 +345,143 @@ export class SessionService {
       }
     } catch (err) {
       console.error('[SessionService] Lỗi khi dọn dẹp storage partition:', err)
+    }
+  }
+
+  /**
+   * Lấy storageState đã giải mã phục vụ cho Playwright Worker.
+   * Chuyển đổi cấu trúc cookies tương thích hoàn toàn với Playwright context.
+   */
+  public async getDecryptedStorageState(): Promise<{
+    cookies: Array<{
+      name: string
+      value: string
+      domain: string
+      path: string
+      expires: number
+      httpOnly: boolean
+      secure: boolean
+      sameSite: 'Strict' | 'Lax' | 'None'
+    }>
+    origins: any[]
+  } | null> {
+    try {
+      const db = getDatabase()
+      const row = db
+        .prepare('SELECT encrypted_session FROM accounts WHERE id = ? AND status = ? LIMIT 1')
+        .get('primary_account', 'connected') as any
+
+      if (!row || !row.encrypted_session) {
+        return null
+      }
+
+      const decryptedJson = decryptSession(row.encrypted_session)
+      const payload = JSON.parse(decryptedJson) as StoredSessionPayload
+
+      if (!payload || !Array.isArray(payload.cookies)) {
+        return null
+      }
+
+      const playwrightCookies = payload.cookies.map((c) => {
+        let sameSite: 'Strict' | 'Lax' | 'None' = 'None'
+        if (c.sameSite?.toLowerCase() === 'strict') sameSite = 'Strict'
+        else if (c.sameSite?.toLowerCase() === 'lax') sameSite = 'Lax'
+
+        let domain = c.domain || '.facebook.com'
+        if (!domain.startsWith('.') && !domain.includes('facebook.com')) {
+          domain = '.facebook.com'
+        }
+
+        return {
+          name: c.name,
+          value: c.value,
+          domain,
+          path: c.path || '/',
+          expires: c.expires || c.expirationDate || -1,
+          httpOnly: Boolean(c.httpOnly),
+          secure: c.secure !== undefined ? Boolean(c.secure) : true,
+          sameSite
+        }
+      })
+
+      return {
+        cookies: playwrightCookies,
+        origins: []
+      }
+    } catch (err) {
+      console.error('[SessionService] Lỗi khi lấy decrypted storageState:', err)
+      return null
+    }
+  }
+
+  /**
+   * Đồng bộ phiên 2 chiều (Two-Way Session Sync): Nhận storageState mới nhất từ Playwright Worker,
+   * mã hóa qua safeStorage và cập nhật lại bảng accounts trong SQLite.
+   */
+  public async syncSessionFromStorageState(storageState: { cookies: any[]; origins?: any[] }): Promise<boolean> {
+    try {
+      if (!storageState || !Array.isArray(storageState.cookies) || storageState.cookies.length === 0) {
+        return false
+      }
+
+      const db = getDatabase()
+      const row = db
+        .prepare('SELECT fb_user_id, name, avatar_url FROM accounts WHERE id = ?')
+        .get('primary_account') as any
+
+      if (!row) {
+        return false
+      }
+
+      const payload: StoredSessionPayload = {
+        cookies: storageState.cookies,
+        lastSyncedAt: new Date().toISOString()
+      }
+
+      const encryptedBlob = encryptSession(JSON.stringify(payload))
+
+      db.prepare(`
+        UPDATE accounts
+        SET encrypted_session = ?, last_synced_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE id = 'primary_account'
+      `).run(encryptedBlob)
+
+      // Cập nhật cookies vào Electron partition nếu session khả dụng
+      if (session && typeof session.fromPartition === 'function') {
+        const fbSession = session.fromPartition(FB_PARTITION)
+        for (const cookie of storageState.cookies) {
+          try {
+            const domain = cookie.domain
+              ? cookie.domain.startsWith('.')
+                ? cookie.domain.slice(1)
+                : cookie.domain
+              : 'facebook.com'
+            const url = `https://${domain}${cookie.path || '/'}`
+
+            await fbSession.cookies.set({
+              url,
+              name: cookie.name,
+              value: cookie.value,
+              domain,
+              path: cookie.path || '/',
+              secure: cookie.secure !== undefined ? Boolean(cookie.secure) : true,
+              httpOnly: cookie.httpOnly !== undefined ? Boolean(cookie.httpOnly) : false,
+              sameSite:
+                cookie.sameSite?.toLowerCase() === 'strict'
+                  ? 'strict'
+                  : cookie.sameSite?.toLowerCase() === 'lax'
+                    ? 'lax'
+                    : 'no_restriction',
+              expirationDate: cookie.expires || cookie.expirationDate
+            })
+          } catch {}
+        }
+      }
+
+      return true
+    } catch (err) {
+      console.error('[SessionService] Lỗi khi syncSessionFromStorageState:', err)
+      return false
     }
   }
 

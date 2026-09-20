@@ -8,7 +8,11 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
-        external: ['better-sqlite3']
+        input: {
+          index: resolve('src/main/index.ts'),
+          worker: resolve('src/worker/index.ts')
+        },
+        external: ['better-sqlite3', 'playwright-core']
       }
     }
   },
