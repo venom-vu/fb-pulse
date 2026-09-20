@@ -136,3 +136,98 @@ export async function clickPostButton(page: Page): Promise<boolean> {
 
   return false
 }
+
+/**
+ * Kiểm tra xem Facebook có hiển thị thông báo bài viết đang chờ phê duyệt hay không
+ */
+export async function checkAdminApprovalPending(page: Page): Promise<boolean> {
+  const approvalKeywords = [
+    'chờ phê duyệt',
+    'chờ quản trị viên',
+    'quản trị viên phê duyệt',
+    'đã được gửi đến quản trị viên',
+    'pending approval',
+    'submitted and is pending approval',
+    'admins of this group review posts',
+    'pending admin approval'
+  ]
+
+  // 1. Kiểm tra trong các role alert, dialog hoặc toast
+  const containerSelectors = [
+    'div[role="alert"]',
+    'div[role="dialog"]',
+    'div[aria-live="polite"]',
+    'div[aria-live="assertive"]'
+  ]
+
+  for (const selector of containerSelectors) {
+    try {
+      const containers = page.locator(selector)
+      const count = await containers.count()
+      for (let i = 0; i < count; i++) {
+        const text = (await containers.nth(i).textContent())?.toLowerCase() || ''
+        for (const keyword of approvalKeywords) {
+          if (text.includes(keyword)) {
+            return true
+          }
+        }
+      }
+    } catch {
+      // Bỏ qua lỗi DOM
+    }
+  }
+
+  // 2. Fallback: Kiểm tra các phần tử text hiển thị
+  for (const keyword of approvalKeywords) {
+    try {
+      const match = page.locator(`text="${keyword}"`).first()
+      if (await match.isVisible()) {
+        return true
+      }
+    } catch {
+      // Bỏ qua
+    }
+  }
+
+  return false
+}
+
+/**
+ * Trích xuất permalink của bài viết vừa đăng trên trang nhóm
+ */
+export async function extractPostPermalink(page: Page, targetId?: string): Promise<string | null> {
+  try {
+    // 1. Tìm các liên kết bài viết xuất hiện ở phần đầu trang
+    const postLinkSelectors = [
+      'a[href*="/posts/"]',
+      'a[href*="permalink.php"]',
+      'a[href*="/permalink/"]'
+    ]
+
+    for (const selector of postLinkSelectors) {
+      const links = page.locator(selector)
+      const count = await links.count()
+      for (let i = 0; i < Math.min(count, 5); i++) {
+        const href = await links.nth(i).getAttribute('href')
+        if (href) {
+          if (href.startsWith('http://') || href.startsWith('https://')) {
+            return href.split('?')[0]
+          } else if (href.startsWith('/')) {
+            return `https://www.facebook.com${href.split('?')[0]}`
+          }
+        }
+      }
+    }
+
+    // 2. Fallback: Nếu có targetId nhóm, tạo permalink nhóm
+    if (targetId && !targetId.startsWith('http')) {
+      return `https://www.facebook.com/groups/${targetId}`
+    }
+
+    return null
+  } catch (err) {
+    console.warn('[Worker:dom-actions] Không thể trích xuất permalink bài viết:', err)
+    return null
+  }
+}
+

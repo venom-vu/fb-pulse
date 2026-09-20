@@ -1,11 +1,14 @@
-import { utilityProcess, type UtilityProcess } from 'electron'
+import { app, utilityProcess, type UtilityProcess } from 'electron'
 import { join } from 'path'
 import { sessionService } from './session.service'
 
 export interface WorkerTaskResult {
   success: boolean
+  status?: 'success' | 'admin_pending' | 'failed'
   permalink?: string
+  errorCode?: string
   error?: string
+  screenshotPath?: string
   newStorageState?: any
 }
 
@@ -38,6 +41,18 @@ export class WorkerManager {
     }
     // Khi chạy trong build hoặc dev của electron-vite: out/main/worker.js
     return join(__dirname, 'worker.js')
+  }
+
+  /**
+   * Lấy đường dẫn thư mục lưu ảnh chụp màn hình sự cố
+   */
+  getScreenshotDir(): string {
+    try {
+      if (app && typeof app.getPath === 'function') {
+        return join(app.getPath('userData'), 'logs', 'screenshots')
+      }
+    } catch {}
+    return join(process.cwd(), 'logs', 'screenshots')
   }
 
   /**
@@ -143,7 +158,8 @@ export class WorkerManager {
       target_type: task.target_type,
       resolved_spintax_text: task.resolved_spintax_text || '',
       media_paths: Array.isArray(task.media_paths) ? task.media_paths : [],
-      storageState
+      storageState,
+      screenshotDir: this.getScreenshotDir()
     }
 
     return new Promise<WorkerTaskResult>((resolve, reject) => {

@@ -1,5 +1,15 @@
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core'
-import { humanType, naturalScroll, uploadImages, clickPostButton, humanDelay } from './dom-actions'
+import { join } from 'path'
+import { existsSync, mkdirSync } from 'fs'
+import {
+  humanType,
+  naturalScroll,
+  uploadImages,
+  clickPostButton,
+  humanDelay,
+  checkAdminApprovalPending,
+  extractPostPermalink
+} from './dom-actions'
 
 export interface AutomationTaskPayload {
   id: string
@@ -8,18 +18,64 @@ export interface AutomationTaskPayload {
   resolved_spintax_text: string
   media_paths: string[]
   storageState: any
+  screenshotDir?: string
 }
 
 export interface AutomationResult {
   success: boolean
+  status?: 'success' | 'admin_pending' | 'failed'
   permalink?: string
+  errorCode?: string
   error?: string
+  screenshotPath?: string
   newStorageState?: any
 }
 
 export class AutomationRunner {
   private browser: Browser | null = null
   private context: BrowserContext | null = null
+
+  /**
+   * Phân loại mã lỗi dựa trên nội dung thông điệp lỗi
+   */
+  classifyErrorCode(errorMessage: string): string {
+    const msg = errorMessage.toLowerCase()
+    if (
+      msg.includes('network') ||
+      msg.includes('err_internet_disconnected') ||
+      msg.includes('err_name_not_resolved') ||
+      msg.includes('net::') ||
+      msg.includes('timeouterror') ||
+      msg.includes('timeout') ||
+      msg.includes('navigation timeout') ||
+      msg.includes('etimedout') ||
+      msg.includes('econnrefused')
+    ) {
+      return 'NETWORK_TIMEOUT'
+    }
+    if (msg.includes('element_not_found') || msg.includes('element') || msg.includes('selector')) {
+      return 'DOM_TIMEOUT'
+    }
+    return 'EXECUTION_ERROR'
+  }
+
+  /**
+   * Chụp ảnh màn hình khi xảy ra lỗi sự cố
+   */
+  async captureErrorScreenshot(page: Page | null, task: AutomationTaskPayload): Promise<string | undefined> {
+    if (!page || !task.screenshotDir) return undefined
+    try {
+      if (!existsSync(task.screenshotDir)) {
+        mkdirSync(task.screenshotDir, { recursive: true })
+      }
+      const screenshotPath = join(task.screenshotDir, `error-${task.id}-${Date.now()}.png`)
+      await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {})
+      return screenshotPath
+    } catch (err) {
+      console.warn('[Worker:AutomationRunner] Lỗi khi chụp ảnh màn hình sự cố:', err)
+      return undefined
+    }
+  }
 
   /**
    * Khởi chạy trình duyệt Playwright Headless Chromium với cờ vô hiệu hóa automation
@@ -85,9 +141,10 @@ export class AutomationRunner {
    * Thực thi trọn vẹn quy trình đăng bài vào Nhóm Facebook
    */
   async executePost(task: AutomationTaskPayload): Promise<AutomationResult> {
+    let page: Page | null = null
     try {
       this.context = await this.createContext(task.storageState)
-      const page = await this.context.newPage()
+      page = await this.context.newPage()
 
       // 1. Xác định URL trang đích
       let targetUrl = `https://www.facebook.com/groups/${task.target_id}`
@@ -96,13 +153,15 @@ export class AutomationRunner {
       }
 
       console.log(`[Worker:AutomationRunner] Điều hướng tới ${targetUrl}`)
-      const response = await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+      await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
 
       // 2. Kiểm tra tính hợp lệ của phiên làm việc
       const currentUrl = page.url()
       if (currentUrl.includes('/login') || currentUrl.includes('/two_step_verification')) {
         return {
           success: false,
+          status: 'failed',
+          errorCode: 'AUTH_SESSION_INVALID',
           error: 'AUTH_SESSION_INVALID: Phiên đăng nhập đã hết hạn hoặc bị đăng xuất'
         }
       }
@@ -141,9 +200,13 @@ export class AutomationRunner {
       }
 
       if (!triggerFound) {
+        const screenshotPath = await this.captureErrorScreenshot(page, task)
         return {
           success: false,
-          error: 'ELEMENT_NOT_FOUND: Không tìm thấy ô mở khung tạo bài viết trên trang nhóm'
+          status: 'failed',
+          errorCode: 'DOM_TIMEOUT',
+          error: 'ELEMENT_NOT_FOUND: Không tìm thấy ô mở khung tạo bài viết trên trang nhóm',
+          screenshotPath
         }
       }
 
@@ -167,9 +230,13 @@ export class AutomationRunner {
       }
 
       if (!editorLocator) {
+        const screenshotPath = await this.captureErrorScreenshot(page, task)
         return {
           success: false,
-          error: 'ELEMENT_NOT_FOUND: Không tìm thấy ô nhập nội dung bài viết'
+          status: 'failed',
+          errorCode: 'DOM_TIMEOUT',
+          error: 'ELEMENT_NOT_FOUND: Không tìm thấy ô nhập nội dung bài viết',
+          screenshotPath
         }
       }
 
@@ -190,9 +257,13 @@ export class AutomationRunner {
       console.log('[Worker:AutomationRunner] Đang bấm nút Đăng bài')
       const posted = await clickPostButton(page)
       if (!posted) {
+        const screenshotPath = await this.captureErrorScreenshot(page, task)
         return {
           success: false,
-          error: 'ELEMENT_NOT_FOUND: Không tìm thấy hoặc không thể nhấp nút Đăng bài'
+          status: 'failed',
+          errorCode: 'DOM_TIMEOUT',
+          error: 'ELEMENT_NOT_FOUND: Không tìm thấy hoặc không thể nhấp nút Đăng bài',
+          screenshotPath
         }
       }
 
@@ -205,18 +276,41 @@ export class AutomationRunner {
 
       await humanDelay(2000, 3000)
 
-      // 10. Trích xuất storageState mới nhất (Two-Way Session Sync)
-      const newStorageState = await this.context.storageState()
+      // 10. Kiểm tra xem bài viết có ở trạng thái chờ Admin duyệt không
+      const isAdminPending = await checkAdminApprovalPending(page)
+      const newStorageState = await this.context.storageState().catch(() => undefined)
+
+      if (isAdminPending) {
+        console.log('[Worker:AutomationRunner] Phát hiện bài viết đang chờ Quản trị viên duyệt [Admin Approval Pending]')
+        return {
+          success: true,
+          status: 'admin_pending',
+          newStorageState
+        }
+      }
+
+      // 11. Trích xuất permalink bài viết công khai
+      const permalink = await extractPostPermalink(page, task.target_id)
+      console.log(`[Worker:AutomationRunner] Đăng bài thành công [Success], permalink: ${permalink || 'N/A'}`)
 
       return {
         success: true,
+        status: 'success',
+        permalink: permalink || undefined,
         newStorageState
       }
     } catch (err: any) {
       console.error('[Worker:AutomationRunner] Lỗi thực thi tác vụ:', err)
+      const errorMessage = err?.message || 'Lỗi không xác định khi thực thi tự động hóa'
+      const errorCode = this.classifyErrorCode(errorMessage)
+      const screenshotPath = await this.captureErrorScreenshot(page, task)
+
       return {
         success: false,
-        error: err?.message || 'Lỗi không xác định khi thực thi tự động hóa'
+        status: 'failed',
+        errorCode,
+        error: errorMessage,
+        screenshotPath
       }
     } finally {
       await this.cleanup()

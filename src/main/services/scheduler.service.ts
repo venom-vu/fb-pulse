@@ -1,4 +1,4 @@
-import { BrowserWindow, powerSaveBlocker } from 'electron'
+import { BrowserWindow, powerSaveBlocker, Notification } from 'electron'
 import { getDatabase } from '../database/connection'
 import { settingsService } from './settings.service'
 import { workerManager } from './worker-manager'
@@ -16,7 +16,17 @@ export class SchedulerService {
   private isPausing = false
   private currentTaskId: string | null = null
   private isProcessing = false
-  private taskExecutor: ((task: any) => Promise<{ success: boolean; permalink?: string; error?: string }>) | null = null
+  private taskExecutor:
+    | ((task: any) => Promise<{
+        success: boolean
+        status?: 'success' | 'admin_pending' | 'failed'
+        permalink?: string
+        errorCode?: string
+        error?: string
+        screenshotPath?: string
+      }>)
+    | null = null
+  private futureCheckTimer: NodeJS.Timeout | null = null
 
   // Wake-up Recovery & Power Management (Story 4.4)
   private wakeupRecovery: WakeupRecoveryDTO = {
@@ -39,9 +49,33 @@ export class SchedulerService {
    * Đăng ký hàm thực thi tác vụ (dùng cho Playwright Worker ở Epic 5 hoặc Mock trong Unit Tests)
    */
   setTaskExecutor(
-    executor: ((task: any) => Promise<{ success: boolean; permalink?: string; error?: string }>) | null
+    executor:
+      | ((task: any) => Promise<{
+          success: boolean
+          status?: 'success' | 'admin_pending' | 'failed'
+          permalink?: string
+          errorCode?: string
+          error?: string
+          screenshotPath?: string
+        }>)
+      | null
   ): void {
     this.taskExecutor = executor
+  }
+
+  /**
+   * Lên lịch kiểm tra lại hàng đợi cho các tác vụ hẹn giờ ở tương lai
+   */
+  scheduleNextQueueCheck(delayMs: number): void {
+    if (this.futureCheckTimer) {
+      clearTimeout(this.futureCheckTimer)
+      this.futureCheckTimer = null
+    }
+    const safeDelay = Math.max(1000, Math.floor(delayMs))
+    this.futureCheckTimer = setTimeout(() => {
+      this.futureCheckTimer = null
+      this.triggerQueueLoop()
+    }, safeDelay)
   }
 
   /**
@@ -389,7 +423,7 @@ export class SchedulerService {
         SELECT t.*, c.min_jitter_sec, c.max_jitter_sec
         FROM scheduled_tasks t
         LEFT JOIN campaigns c ON t.campaign_id = c.id
-        WHERE t.status = 'scheduled'
+        WHERE (t.status = 'scheduled' OR t.status = 'retrying')
           AND datetime(t.scheduled_at) <= datetime('now')
         ORDER BY datetime(t.scheduled_at) ASC, datetime(t.created_at) ASC
         LIMIT 1
@@ -401,6 +435,24 @@ export class SchedulerService {
         this.status = 'idle'
         this.currentTaskId = null
         this.broadcastTick()
+      }
+
+      // Kiểm tra xem có tác vụ hẹn giờ hoặc đang thử lại trong tương lai không
+      const futureTask = db
+        .prepare(`
+          SELECT scheduled_at
+          FROM scheduled_tasks
+          WHERE status IN ('scheduled', 'retrying')
+          ORDER BY datetime(scheduled_at) ASC
+          LIMIT 1
+        `)
+        .get() as { scheduled_at: string } | undefined
+
+      if (futureTask) {
+        const futureMs = new Date(futureTask.scheduled_at).getTime() - Date.now()
+        if (futureMs > 0) {
+          this.scheduleNextQueueCheck(futureMs)
+        }
       }
       return
     }
@@ -422,33 +474,124 @@ export class SchedulerService {
     }
 
     let success = false
+    let taskStatus: 'success' | 'admin_pending' | 'failed' = 'failed'
     let permalink: string | undefined
+    let errorCode: string | undefined
     let errorMessage: string | undefined
+    let screenshotPath: string | undefined
 
     try {
       if (this.taskExecutor) {
         const res = await this.taskExecutor(nextTask)
         success = res.success
+        taskStatus = res.status || (res.success ? 'success' : 'failed')
         permalink = res.permalink
+        errorCode = res.errorCode
         errorMessage = res.error
+        screenshotPath = res.screenshotPath
       } else {
         // Thực thi qua Electron utilityProcess Worker độc lập (Story 5.1 / AD-1)
         const res = await workerManager.executeTask(nextTask)
         success = res.success
+        taskStatus = res.status || (res.success ? 'success' : 'failed')
         permalink = res.permalink
+        errorCode = res.errorCode
         errorMessage = res.error
+        screenshotPath = res.screenshotPath
       }
     } catch (err: any) {
       success = false
+      taskStatus = 'failed'
       errorMessage = err?.message || 'Lỗi thực thi tác vụ'
+      errorCode = 'EXECUTION_ERROR'
     }
 
-    const finalStatus = success ? 'success' : 'failed'
-    db.prepare(`
-      UPDATE scheduled_tasks
-      SET status = ?, permalink = ?, error_message = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(finalStatus, permalink || null, errorMessage || null, nextTask.id)
+    if (taskStatus === 'admin_pending') {
+      // 1. Facebook yêu cầu duyệt: Gán trạng thái admin_pending [Admin Approval Pending]
+      db.prepare(`
+        UPDATE scheduled_tasks
+        SET status = 'admin_pending', permalink = ?, error_code = NULL, error_message = NULL, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(permalink || null, nextTask.id)
+    } else if (success || taskStatus === 'success') {
+      // 2. Đăng công khai thành công trực tiếp [Success]
+      db.prepare(`
+        UPDATE scheduled_tasks
+        SET status = 'success', permalink = ?, error_code = NULL, error_message = NULL, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(permalink || null, nextTask.id)
+    } else {
+      // 3. Thất bại: Kiểm tra cơ chế tự động thử lại đa tầng (Multi-tier Non-blocking Retry)
+      const currentRetryCount = nextTask.retry_count || 0
+      const isRetryable =
+        errorCode === 'NETWORK_TIMEOUT' ||
+        errorCode === 'DOM_TIMEOUT' ||
+        (errorMessage &&
+          (errorMessage.toLowerCase().includes('timeout') ||
+            errorMessage.toLowerCase().includes('network') ||
+            errorMessage.toLowerCase().includes('element_not_found')))
+
+      if (isRetryable && currentRetryCount < 2) {
+        const nextRetryCount = currentRetryCount + 1
+        // Lần 1 sau 3 phút (180s), Lần 2 sau 5 phút (300s)
+        const delayMinutes = nextRetryCount === 1 ? 3 : 5
+        const delaySeconds = delayMinutes * 60
+        const nextScheduledDate = new Date(Date.now() + delaySeconds * 1000).toISOString()
+
+        console.log(
+          `[SchedulerService] Tác vụ ${nextTask.id} gặp sự cố (${errorCode || 'TIMEOUT'}), thử lại lần ${nextRetryCount}/2 sau ${delayMinutes} phút`
+        )
+
+        db.prepare(`
+          UPDATE scheduled_tasks
+          SET status = 'retrying',
+              retry_count = ?,
+              scheduled_at = ?,
+              error_code = ?,
+              error_message = ?,
+              screenshot_path = ?,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(
+          nextRetryCount,
+          nextScheduledDate,
+          errorCode || 'TIMEOUT',
+          errorMessage || `Đang thử lại (lần ${nextRetryCount}/2)`,
+          screenshotPath || null,
+          nextTask.id
+        )
+
+        this.scheduleNextQueueCheck(delaySeconds * 1000)
+      } else {
+        // Sau 2 lần thử lại vẫn thất bại hoặc lỗi không thể thử lại
+        const finalErrorCode = isRetryable ? 'NETWORK_TIMEOUT' : errorCode || 'EXECUTION_FAILED'
+        const finalErrorMessage = isRetryable ? '[Failed - Network Timeout]' : errorMessage || 'Lỗi thực thi tác vụ'
+
+        console.log(`[SchedulerService] Tác vụ ${nextTask.id} thất bại hoàn toàn: ${finalErrorMessage}`)
+
+        db.prepare(`
+          UPDATE scheduled_tasks
+          SET status = 'failed',
+              error_code = ?,
+              error_message = ?,
+              screenshot_path = ?,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(finalErrorCode, finalErrorMessage, screenshotPath || null, nextTask.id)
+
+        // Gửi Native Desktop Notification
+        try {
+          if (typeof Notification !== 'undefined' && Notification.isSupported()) {
+            new Notification({
+              title: 'fb-pulse: Đăng bài thất bại',
+              body: `Bài đăng tới "${nextTask.target_name || nextTask.target_id}" thất bại: ${finalErrorMessage}`
+            }).show()
+          }
+        } catch (notifErr) {
+          console.warn('[SchedulerService] Không thể gửi Desktop Notification:', notifErr)
+        }
+      }
+    }
 
     const completedTask = this.getTaskById(nextTask.id)
     if (completedTask) {
@@ -466,22 +609,22 @@ export class SchedulerService {
       return
     }
 
-    // Kiểm tra xem còn tác vụ scheduled nào không
-    const remainingCountRow = db
+    // Kiểm tra xem còn tác vụ nào sẵn sàng thực thi ngay không (non-blocking)
+    const readyCountRow = db
       .prepare(`
         SELECT COUNT(*) as count
         FROM scheduled_tasks
-        WHERE status = 'scheduled'
+        WHERE (status = 'scheduled' OR status = 'retrying')
+          AND datetime(scheduled_at) <= datetime('now')
       `)
       .get() as { count: number } | undefined
 
-    if (remainingCountRow && remainingCountRow.count > 0) {
-      // Kiểm tra xem có tác vụ quá hạn cần áp dụng dải Jitter an toàn (3–7 phút = 180s–420s) không
+    if (readyCountRow && readyCountRow.count > 0) {
       const overdueRow = db
         .prepare(`
           SELECT COUNT(*) as count
           FROM scheduled_tasks
-          WHERE status = 'scheduled'
+          WHERE (status = 'scheduled' OR status = 'retrying')
             AND datetime(scheduled_at) <= datetime('now')
         `)
         .get() as { count: number } | undefined
@@ -495,6 +638,24 @@ export class SchedulerService {
         this.triggerQueueLoop()
       })
     } else {
+      // Không có tác vụ sẵn sàng ngay: kiểm tra xem có tác vụ hẹn giờ ở tương lai không
+      const futureTask = db
+        .prepare(`
+          SELECT scheduled_at
+          FROM scheduled_tasks
+          WHERE status IN ('scheduled', 'retrying')
+          ORDER BY datetime(scheduled_at) ASC
+          LIMIT 1
+        `)
+        .get() as { scheduled_at: string } | undefined
+
+      if (futureTask) {
+        const futureMs = new Date(futureTask.scheduled_at).getTime() - Date.now()
+        if (futureMs > 0) {
+          this.scheduleNextQueueCheck(futureMs)
+        }
+      }
+
       this.status = 'idle'
       this.broadcastTick()
       // Giải phóng hoàn toàn tiến trình Worker khi hàng đợi rảnh (Story 5.1 / AD-1)
@@ -510,6 +671,10 @@ export class SchedulerService {
    * Reset trạng thái phục vụ cho unit testing
    */
   resetForTesting(): void {
+    if (this.futureCheckTimer) {
+      clearTimeout(this.futureCheckTimer)
+      this.futureCheckTimer = null
+    }
     this.stopJitter()
     this.stopWakeupRecovery()
     this.status = 'idle'

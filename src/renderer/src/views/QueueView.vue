@@ -407,11 +407,12 @@
               <!-- Status Badge -->
               <td class="py-3.5 px-4 text-center whitespace-nowrap">
                 <span
-                  class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                  class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider cursor-help"
                   :class="getStatusBadgeClass(task.status)"
+                  :title="getStatusTooltip(task)"
                 >
                   <span class="w-1.5 h-1.5 rounded-full mr-1.5" :class="getStatusDotClass(task.status)"></span>
-                  {{ getStatusLabel(task.status) }}
+                  {{ getStatusLabel(task.status, task.retry_count) }}
                 </span>
                 <div v-if="task.error_message" class="text-[10px] text-[#EF4444] mt-1 max-w-[150px] truncate mx-auto" :title="task.error_message">
                   {{ task.error_message }}
@@ -544,7 +545,7 @@ function getTabCount(tabId: string): number {
   return queueStore.tasks.filter((t) => t.status === tabId).length
 }
 
-function getStatusLabel(status: string): string {
+function getStatusLabel(status: string, retryCount = 0): string {
   switch (status) {
     case 'scheduled':
       return 'Chờ phát hành'
@@ -559,7 +560,7 @@ function getStatusLabel(status: string): string {
     case 'admin_pending':
       return 'Chờ admin duyệt'
     case 'retrying':
-      return 'Đang thử lại'
+      return retryCount > 0 ? `Thử lại (${retryCount}/2)` : 'Đang thử lại'
     case 'failed':
       return 'Thất bại'
     case 'cancelled':
@@ -568,6 +569,32 @@ function getStatusLabel(status: string): string {
       return 'Tạm dừng Auth'
     default:
       return status
+  }
+}
+
+function getStatusTooltip(task: any): string {
+  if (!task) return ''
+  switch (task.status) {
+    case 'admin_pending':
+      return 'Bài viết đã được gửi và đang chờ Quản trị viên nhóm phê duyệt. Hệ thống không coi đây là lỗi và tiếp tục xử lý các bài khác bình thường.'
+    case 'retrying':
+      return `Đang chờ thử lại lần ${task.retry_count || 1}/2 do sự cố gián đoạn tạm thời.`
+    case 'success':
+      return task.permalink ? `Đăng bài thành công. Permalink: ${task.permalink}` : 'Đăng bài thành công'
+    case 'failed':
+      return task.error_message || 'Bài đăng thất bại'
+    case 'scheduled':
+      return 'Tác vụ đang chờ tới thời điểm phát hành'
+    case 'running':
+      return 'Tiến trình Worker đang thực thi đăng bài'
+    case 'jitter_waiting':
+      return 'Hệ thống đang nghỉ ngơi Anti-ban Jitter giữa 2 bài đăng'
+    case 'paused':
+      return 'Hàng đợi đang tạm dừng'
+    case 'auth_paused':
+      return 'Tạm dừng do cần xác thực tài khoản Facebook'
+    default:
+      return ''
   }
 }
 
