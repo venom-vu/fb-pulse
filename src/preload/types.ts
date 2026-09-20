@@ -106,9 +106,11 @@ export interface TaskDTO {
 
 export interface QueueFilterDTO {
   status?: string
+  statuses?: string[]
   campaignId?: string
   limit?: number
   offset?: number
+  orderBy?: 'asc' | 'desc'
 }
 
 export interface QueueTickDTO {
@@ -194,6 +196,7 @@ export interface FBPulseAPI {
   app: {
     getInfo: () => Promise<AppInfoDTO>
     getImageDataUrl: (filePath: string) => Promise<IPCResult<string>>
+    openExternal: (url: string) => Promise<IPCResult<void>>
   }
   onSessionRefreshed: (callback: (account: AccountDTO) => void) => () => void
   onEmergencyPause: (

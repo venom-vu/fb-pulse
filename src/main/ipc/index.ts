@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, app } from 'electron'
+import { ipcMain, BrowserWindow, app, shell } from 'electron'
 import { getDatabase } from '../database/connection'
 import { sessionService } from '../services/session.service'
 import { targetService } from '../services/target.service'
@@ -90,6 +90,35 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         error: {
           code: 'READ_ERROR',
           message: err?.message || 'Không thể đọc tệp ảnh'
+        }
+      }
+    }
+  })
+
+  // Open External URL Handler
+  ipcMain.handle('app:open-external', async (_event, url: string): Promise<IPCResult<void>> => {
+    try {
+      if (!url || typeof url !== 'string') {
+        return { success: false, error: { code: 'INVALID_URL', message: 'URL không hợp lệ' } }
+      }
+      const trimmed = url.trim()
+      if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+        return { success: false, error: { code: 'UNSUPPORTED_PROTOCOL', message: 'Chỉ hỗ trợ giao thức HTTP/HTTPS' } }
+      }
+      try {
+        new URL(trimmed)
+      } catch {
+        return { success: false, error: { code: 'INVALID_URL', message: 'Định dạng URL không hợp lệ' } }
+      }
+      await shell.openExternal(trimmed)
+      return { success: true }
+    } catch (err: any) {
+      console.warn('[IPC] Lỗi khi mở URL external:', err)
+      return {
+        success: false,
+        error: {
+          code: 'OPEN_EXTERNAL_ERROR',
+          message: err?.message || 'Không thể mở liên kết trên trình duyệt'
         }
       }
     }

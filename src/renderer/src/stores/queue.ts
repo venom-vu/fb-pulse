@@ -48,6 +48,30 @@ export const useQueueStore = defineStore('queue', () => {
     return tasks.value.filter((t) => t.status === filterStatus.value)
   })
 
+  const activeQueueTasks = computed(() => {
+    return tasks.value.filter((t) =>
+      ['scheduled', 'jitter_waiting', 'running', 'paused', 'retrying', 'auth_paused'].includes(t.status)
+    )
+  })
+
+  const historyTasks = computed(() => {
+    return tasks.value.filter((t) =>
+      ['success', 'admin_pending', 'failed', 'cancelled'].includes(t.status)
+    )
+  })
+
+  async function openExternalUrl(url: string): Promise<{ success: boolean; error?: string }> {
+    if (!url) {
+      return { success: false, error: 'URL không hợp lệ' }
+    }
+    if (window.fbPulseAPI?.app?.openExternal) {
+      const res = await window.fbPulseAPI.app.openExternal(url)
+      if (res.success) return { success: true }
+      return { success: false, error: res.error?.message || 'Không thể mở liên kết' }
+    }
+    return { success: false, error: 'Không thể mở trình duyệt bên ngoài (API không khả dụng)' }
+  }
+
   async function fetchQueueStatus(): Promise<void> {
     if (!window.fbPulseAPI?.queue?.getStatus) return
     try {
@@ -342,6 +366,9 @@ export const useQueueStore = defineStore('queue', () => {
     isWakeupRecovering,
     wakeupRecovery,
     filteredTasks,
+    activeQueueTasks,
+    historyTasks,
+    openExternalUrl,
     fetchQueueStatus,
     fetchJitterStatus,
     fetchWakeupStatus,

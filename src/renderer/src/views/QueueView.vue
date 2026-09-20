@@ -4,7 +4,7 @@
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[#1E293B] pb-4">
       <div>
         <div class="flex items-center space-x-3">
-          <h1 class="text-xl font-bold text-[#F1F5F9] tracking-tight">Điều Phối Hàng Đợi</h1>
+          <h1 class="text-xl font-bold text-[#F1F5F9] tracking-tight">Hàng Đợi & Lịch Sử</h1>
           <span
             v-if="queueStore.isQueuePaused"
             class="px-2 py-0.5 rounded text-[11px] font-bold bg-[#F59E0B]/20 text-[#F59E0B] border border-[#F59E0B]/40"
@@ -31,7 +31,7 @@
           </span>
         </div>
         <p class="text-xs text-[#94A3B8] mt-1">
-          Giám sát tiến độ phát hành, máy trạng thái đơn luồng FIFO và kiểm soát an toàn tài khoản.
+          Giám sát tiến độ phát hành, máy trạng thái đơn luồng FIFO và tra cứu lịch sử bài đăng minh bạch.
         </p>
       </div>
 
@@ -62,6 +62,7 @@
 
         <!-- Refresh Button -->
         <button
+          id="btn-refresh-queue"
           class="p-2 rounded-lg bg-[#131B26] hover:bg-[#1E293B] text-[#94A3B8] hover:text-[#F1F5F9] border border-[#1E293B] transition-all cursor-pointer"
           title="Làm mới danh sách"
           @click="refreshData"
@@ -99,398 +100,612 @@
       </div>
     </div>
 
-    <!-- Wake-up Recovery Banner (Story 4.4) -->
-    <div
-      v-if="queueStore.isWakeupRecovering"
-      id="queue-wakeup-recovery-banner"
-      class="bg-[#131B26] border-2 border-[#3B82F6] rounded-xl p-5 shadow-[0_0_25px_rgba(59,130,246,0.25)] space-y-3 animate-fade-in"
-    >
-      <div class="flex items-center justify-between">
-        <div class="flex items-center space-x-3">
-          <div
-            class="w-9 h-9 rounded-full bg-[#3B82F6]/20 border border-[#3B82F6]/50 text-[#3B82F6] flex items-center justify-center text-lg shrink-0 animate-pulse"
-          >
-            🔄
-          </div>
-          <div>
-            <div class="flex items-center space-x-2">
-              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#3B82F6] text-white">
-                Khôi Phục Sau Khi Máy Thức Dậy
-              </span>
-              <span class="text-xs text-[#94A3B8]">Bảo vệ an toàn tài khoản — Tránh bắn dồn dập</span>
-            </div>
-            <h3 class="text-sm font-bold text-[#F1F5F9] mt-0.5">
-              Phát hiện {{ queueStore.wakeupRecovery.overdueCount }} bài bị hoãn do máy ngủ — Bắt đầu phát hành an toàn sau {{ queueStore.wakeupRecovery.remainingSeconds }}s
-            </h3>
-          </div>
-        </div>
-
-        <div class="text-right">
-          <div class="text-[10px] text-[#94A3B8] uppercase tracking-wider font-semibold">Thời gian ổn định mạng</div>
-          <div id="queue-wakeup-countdown-timer" class="text-2xl font-black font-mono text-[#3B82F6] tracking-tight">
-            00:{{ String(queueStore.wakeupRecovery.remainingSeconds).padStart(2, '0') }}
-          </div>
-        </div>
-      </div>
-
-      <!-- Progress bar -->
-      <div class="w-full bg-[#0B111A] h-2 rounded-full overflow-hidden border border-[#1E293B]">
-        <div
-          class="bg-gradient-to-r from-[#3B82F6] to-[#60A5FA] h-full transition-all duration-1000 ease-linear rounded-full"
-          :style="{
-            width: `${
-              queueStore.wakeupRecovery.totalSeconds > 0
-                ? Math.round(
-                    ((queueStore.wakeupRecovery.totalSeconds - queueStore.wakeupRecovery.remainingSeconds) /
-                      queueStore.wakeupRecovery.totalSeconds) *
-                      100
-                  )
-                : 0
-            }%`
-          }"
-        ></div>
-      </div>
-    </div>
-
-    <!-- Jitter Countdown Card (Story 4.2 & 4.3) -->
-    <div
-      v-if="queueStore.isJitterWaiting || (queueStore.isQueuePaused && queueStore.queueTick.remainingSeconds > 0)"
-      id="queue-jitter-countdown-banner"
-      class="bg-[#131B26] border-2 rounded-xl p-5 shadow-[0_0_25px_rgba(245,158,11,0.15)] space-y-3 animate-fade-in"
-      :class="queueStore.isQueuePaused ? 'border-[#F59E0B]/60 bg-[#131B26]/80' : 'border-[#F59E0B]'"
-    >
-      <div class="flex items-center justify-between">
-        <div class="flex items-center space-x-3">
-          <div
-            class="w-9 h-9 rounded-full flex items-center justify-center text-lg shrink-0"
-            :class="
-              queueStore.isQueuePaused
-                ? 'bg-[#F59E0B]/10 border border-[#F59E0B]/30 text-[#F59E0B]'
-                : 'bg-[#F59E0B]/20 border border-[#F59E0B]/50 text-[#F59E0B]'
-            "
-          >
-            ⏳
-          </div>
-          <div>
-            <div class="flex items-center space-x-2">
-              <span
-                class="px-2 py-0.5 rounded text-[10px] font-bold uppercase"
-                :class="queueStore.isQueuePaused ? 'bg-[#F59E0B]/20 text-[#F59E0B]' : 'bg-[#F59E0B] text-[#0B111A]'"
-              >
-                {{ queueStore.isQueuePaused ? 'Jitter Đang Tạm Dừng' : 'Anti-ban Jitter Đang Kích Hoạt' }}
-              </span>
-              <span class="text-xs text-[#94A3B8]">Giãn cách an toàn giữa 2 bài đăng</span>
-            </div>
-            <h3 class="text-sm font-bold text-[#F1F5F9] mt-0.5">
-              {{
-                queueStore.isQueuePaused
-                  ? 'Hàng đợi đang tạm dừng. Bộ đếm thời gian nghỉ Jitter được bảo lưu, bấm "Tiếp tục" để đếm tiếp.'
-                  : 'Hệ thống đang nghỉ ngơi ngẫu nhiên để bảo vệ tài khoản khỏi thuật toán chống bot'
-              }}
-            </h3>
-          </div>
-        </div>
-
-        <div class="text-right">
-          <div class="text-[10px] text-[#94A3B8] uppercase tracking-wider font-semibold">Thời gian còn lại</div>
-          <div id="queue-countdown-timer" class="text-2xl font-black font-mono text-[#F59E0B] tracking-tight">
-            {{ queueStore.queueTick.formattedCountdown }}
-          </div>
-        </div>
-      </div>
-
-      <!-- Progress bar -->
-      <div class="w-full bg-[#0B111A] h-2 rounded-full overflow-hidden border border-[#1E293B]">
-        <div
-          class="bg-gradient-to-r from-[#F59E0B] to-[#10B981] h-full transition-all duration-1000 ease-linear rounded-full"
-          :style="{
-            width: `${
-              queueStore.queueTick.totalSeconds > 0
-                ? Math.round(
-                    ((queueStore.queueTick.totalSeconds - queueStore.queueTick.remainingSeconds) /
-                      queueStore.queueTick.totalSeconds) *
-                      100
-                  )
-                : 0
-            }%`
-          }"
-        ></div>
-      </div>
-    </div>
-
-    <!-- Emergency Pause Warning Box (Story 1.4 & Story 5.3) -->
-    <div
-      v-if="queueStore.isEmergencyPaused || queueStore.authPausedCount > 0"
-      class="bg-[#131B26] border-4 border-double border-[#EF4444] rounded-xl p-5 shadow-[0_0_25px_rgba(239,68,68,0.25)] space-y-4 animate-fade-in"
-      role="alert"
-      aria-live="polite"
-    >
-      <div class="flex items-start justify-between">
-        <div class="flex items-start space-x-3.5">
-          <div class="w-9 h-9 rounded-full bg-[#EF4444]/20 border border-[#EF4444]/50 flex items-center justify-center text-[#EF4444] shrink-0 mt-0.5">
-            <AlertTriangle class="w-5 h-5" />
-          </div>
-          <div>
-            <div class="flex items-center space-x-2">
-              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#EF4444] text-[#0B111A]">
-                Phòng vệ khẩn cấp (Emergency Pause)
-              </span>
-              <span class="text-xs text-[#94A3B8]">
-                {{ queueStore.emergencyPauseTimestamp ? new Date(queueStore.emergencyPauseTimestamp).toLocaleTimeString('vi-VN') : '' }}
-              </span>
-            </div>
-            <h3 class="text-sm font-bold text-[#F1F5F9] mt-1">
-              Toàn bộ hàng đợi đã tạm dừng an toàn do Facebook yêu cầu xác minh bảo mật hoặc hết hạn phiên
-            </h3>
-            <p class="text-xs text-[#94A3B8] mt-1 leading-relaxed">
-              Lý do: <span class="text-[#EF4444] font-medium">{{ queueStore.emergencyPauseReason || 'Phát hiện phiên hết hạn hoặc yêu cầu Checkpoint' }}</span>.
-              Hiện có <strong class="text-[#F1F5F9]">{{ queueStore.authPausedCount }} bài viết</strong> đang ở trạng thái <code class="text-[#EF4444] font-mono text-[11px] bg-[#EF4444]/10 px-1 py-0.5 rounded">[Paused - Auth Required]</code>.
-            </p>
-          </div>
-        </div>
-
-        <!-- Action Button -->
-        <div class="flex items-center space-x-2 shrink-0">
-          <template v-if="accountStore.account?.status === 'connected'">
-            <button
-              class="px-4 py-2 rounded-lg bg-[#10B981] hover:bg-[#059669] text-[#042419] font-bold text-xs shadow-md transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
-              :disabled="queueStore.isResuming"
-              @click="handleResumeAuthPaused"
-            >
-              <span v-if="queueStore.isResuming" class="w-2 h-2 rounded-full bg-[#042419] animate-ping"></span>
-              <span>{{ queueStore.isResuming ? 'Đang khôi phục...' : 'Tiếp tục hàng đợi (Resume Queue)' }}</span>
-            </button>
-          </template>
-          <template v-else>
-            <button
-              class="px-4 py-2 rounded-lg bg-[#EF4444] hover:bg-[#DC2626] text-white font-bold text-xs shadow-md transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
-              :disabled="accountStore.isLoggingIn"
-              @click="handleReLogin"
-            >
-              <span v-if="accountStore.isLoggingIn" class="w-2 h-2 rounded-full bg-white animate-ping"></span>
-              <span>{{ accountStore.isLoggingIn ? 'Đang mở WebView...' : 'Mở WebView xử lý ngay' }}</span>
-            </button>
-          </template>
-        </div>
-      </div>
-
-      <!-- Ảnh chụp màn hình sự cố Checkpoint minh chứng (Story 5.3) -->
-      <div v-if="screenshotDataUrl" class="mt-2 pt-3 border-t border-[#EF4444]/20 flex items-center justify-between">
-        <div class="flex items-center space-x-3.5">
-          <div
-            class="relative group cursor-pointer shrink-0 rounded-lg overflow-hidden border border-[#EF4444]/40 hover:border-[#EF4444] transition-all shadow-sm"
-            title="Nhấp để xem ảnh chụp màn hình kích thước lớn"
-            @click="showScreenshotModal = true"
-          >
-            <img
-              :src="screenshotDataUrl"
-              alt="Ảnh chụp màn hình Checkpoint"
-              class="w-24 h-16 object-cover group-hover:scale-105 transition-transform"
-            />
-            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-              <Maximize2 class="w-4 h-4 text-white" />
-            </div>
-          </div>
-          <div>
-            <div class="flex items-center space-x-1.5 text-xs font-semibold text-[#F1F5F9]">
-              <Camera class="w-3.5 h-3.5 text-[#EF4444]" />
-              <span>Ảnh chụp màn hình sự cố Playwright</span>
-            </div>
-            <p class="text-[11px] text-[#94A3B8] mt-0.5 leading-relaxed">
-              Bằng chứng xác thực tại thời điểm phát hiện Checkpoint. Bấm vào ảnh để xem chi tiết chẩn đoán lỗi.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Filter Tabs -->
-    <div class="flex items-center justify-between border-b border-[#1E293B] pb-1 overflow-x-auto">
-      <div class="flex items-center space-x-1">
-        <button
-          v-for="tab in filterTabs"
-          :key="tab.id"
-          :class="[
-            'px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center space-x-2 cursor-pointer',
-            queueStore.filterStatus === tab.id
-              ? 'bg-[#1E293B] text-[#F1F5F9] shadow-sm'
-              : 'text-[#94A3B8] hover:text-[#CBD5E1] hover:bg-[#131B26]'
-          ]"
-          @click="queueStore.filterStatus = tab.id"
+    <!-- Main Navigation Tabs: Hàng Đợi Phát Hành vs Lịch Sử Đăng Bài (Story 5.4) -->
+    <div class="flex items-center space-x-1 bg-[#131B26] p-1 rounded-xl border border-[#1E293B] w-fit">
+      <button
+        id="tab-btn-queue"
+        :class="[
+          'px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer',
+          activeMainTab === 'queue'
+            ? 'bg-[#1E293B] text-[#F1F5F9] shadow-sm'
+            : 'text-[#94A3B8] hover:text-[#CBD5E1] hover:bg-[#0B111A]/50'
+        ]"
+        @click="activeMainTab = 'queue'"
+      >
+        <ListOrdered class="w-3.5 h-3.5" />
+        <span>Hàng Đợi Phát Hành</span>
+        <span
+          class="px-1.5 py-0.2 rounded-full text-[10px] font-mono"
+          :class="activeMainTab === 'queue' ? 'bg-[#0B111A] text-[#10B981]' : 'bg-[#1E293B]/60 text-[#64748B]'"
         >
-          <span>{{ tab.label }}</span>
-          <span
-            class="px-1.5 py-0.2 rounded-full text-[10px] font-mono"
-            :class="
-              queueStore.filterStatus === tab.id
-                ? 'bg-[#0B111A] text-[#10B981]'
-                : 'bg-[#1E293B]/60 text-[#64748B]'
-            "
-          >
-            {{ getTabCount(tab.id) }}
-          </span>
-        </button>
-      </div>
+          {{ queueStore.activeQueueTasks.length }}
+        </span>
+      </button>
 
-      <!-- Action helper -->
-      <span class="text-[11px] text-[#64748B] hidden md:inline">
-        Máy trạng thái đơn luồng FIFO • Tự động áp dụng Jitter giữa các bài
-      </span>
+      <button
+        id="tab-btn-history"
+        :class="[
+          'px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer',
+          activeMainTab === 'history'
+            ? 'bg-[#1E293B] text-[#F1F5F9] shadow-sm'
+            : 'text-[#94A3B8] hover:text-[#CBD5E1] hover:bg-[#0B111A]/50'
+        ]"
+        @click="activeMainTab = 'history'"
+      >
+        <History class="w-3.5 h-3.5" />
+        <span>Lịch Sử Đăng Bài</span>
+        <span
+          class="px-1.5 py-0.2 rounded-full text-[10px] font-mono"
+          :class="activeMainTab === 'history' ? 'bg-[#0B111A] text-[#3B82F6]' : 'bg-[#1E293B]/60 text-[#64748B]'"
+        >
+          {{ queueStore.historyTasks.length }}
+        </span>
+      </button>
     </div>
 
-    <!-- Empty State -->
-    <div
-      v-if="queueStore.filteredTasks.length === 0"
-      class="bg-[#131B26] border border-[#1E293B] rounded-xl p-10 text-center space-y-3"
-    >
-      <div class="w-12 h-12 rounded-full bg-[#1E293B] text-[#64748B] flex items-center justify-center mx-auto">
-        <Clock class="w-6 h-6" />
-      </div>
-      <h3 class="text-sm font-semibold text-[#F1F5F9]">
-        {{ queueStore.filterStatus === 'all' ? 'Hàng đợi đang trống' : 'Không có tác vụ nào khớp bộ lọc' }}
-      </h3>
-      <p class="text-xs text-[#94A3B8] max-w-sm mx-auto">
-        {{
-          queueStore.filterStatus === 'all'
-            ? 'Chưa có chiến dịch nào được lên lịch. Hãy chuyển sang tab Soạn Thảo để bắt đầu tạo chiến dịch đầu tiên.'
-            : 'Vui lòng chọn bộ lọc khác hoặc kiểm tra lại danh sách tác vụ.'
-        }}
-      </p>
-    </div>
-
-    <!-- Task List Table -->
-    <div
-      v-else
-      class="bg-[#131B26] border border-[#1E293B] rounded-xl overflow-hidden shadow-lg"
-    >
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-xs text-[#CBD5E1]">
-          <thead class="bg-[#0B111A] text-[#94A3B8] text-[11px] uppercase tracking-wider border-b border-[#1E293B]">
-            <tr>
-              <th scope="col" class="py-3 px-4 font-semibold">Tác vụ / Chiến dịch</th>
-              <th scope="col" class="py-3 px-4 font-semibold">Nhóm đích</th>
-              <th scope="col" class="py-3 px-4 font-semibold">Nội dung</th>
-              <th scope="col" class="py-3 px-4 font-semibold">Lên lịch</th>
-              <th scope="col" class="py-3 px-4 font-semibold text-center">Trạng thái</th>
-              <th scope="col" class="py-3 px-4 font-semibold text-right">Thao tác</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-[#1E293B]">
-            <tr
-              v-for="task in queueStore.filteredTasks"
-              :key="task.id"
-              class="hover:bg-[#1A2333] transition-colors"
+    <!-- TAB 1: HÀNG ĐỢI PHÁT HÀNH -->
+    <template v-if="activeMainTab === 'queue'">
+      <!-- Wake-up Recovery Banner (Story 4.4) -->
+      <div
+        v-if="queueStore.isWakeupRecovering"
+        id="queue-wakeup-recovery-banner"
+        class="bg-[#131B26] border-2 border-[#3B82F6] rounded-xl p-5 shadow-[0_0_25px_rgba(59,130,246,0.25)] space-y-3 animate-fade-in"
+      >
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <div
+              class="w-9 h-9 rounded-full bg-[#3B82F6]/20 border border-[#3B82F6]/50 text-[#3B82F6] flex items-center justify-center text-lg shrink-0 animate-pulse"
             >
-              <!-- Campaign & Task Info -->
-              <td class="py-3.5 px-4 font-medium text-[#F1F5F9] max-w-[180px]">
-                <div class="truncate font-semibold text-sm text-[#F1F5F9]">
-                  {{ task.campaign_title || 'Chiến dịch không tên' }}
-                </div>
-                <div class="text-[10px] text-[#64748B] font-mono mt-0.5 truncate">
-                  ID: {{ task.id.slice(0, 8) }}...
-                </div>
-              </td>
+              🔄
+            </div>
+            <div>
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#3B82F6] text-white">
+                  Khôi Phục Sau Khi Máy Thức Dậy
+                </span>
+                <span class="text-xs text-[#94A3B8]">Bảo vệ an toàn tài khoản — Tránh bắn dồn dập</span>
+              </div>
+              <h3 class="text-sm font-bold text-[#F1F5F9] mt-0.5">
+                Phát hiện {{ queueStore.wakeupRecovery.overdueCount }} bài bị hoãn do máy ngủ — Bắt đầu phát hành an toàn sau {{ queueStore.wakeupRecovery.remainingSeconds }}s
+              </h3>
+            </div>
+          </div>
 
-              <!-- Target Info -->
-              <td class="py-3.5 px-4 max-w-[160px]">
-                <div class="flex items-center space-x-2">
-                  <div class="w-6 h-6 rounded-full bg-[#1E293B] flex items-center justify-center text-[10px] text-[#94A3B8] shrink-0 overflow-hidden border border-[#334155]">
-                    <img
-                      v-if="task.target_avatar_url"
-                      :src="task.target_avatar_url"
-                      alt=""
-                      class="w-full h-full object-cover"
-                    />
-                    <span v-else>{{ task.target_type === 'group' ? '👥' : '👤' }}</span>
+          <div class="text-right">
+            <div class="text-[10px] text-[#94A3B8] uppercase tracking-wider font-semibold">Thời gian ổn định mạng</div>
+            <div id="queue-wakeup-countdown-timer" class="text-2xl font-black font-mono text-[#3B82F6] tracking-tight">
+              00:{{ String(queueStore.wakeupRecovery.remainingSeconds).padStart(2, '0') }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress bar -->
+        <div class="w-full bg-[#0B111A] h-2 rounded-full overflow-hidden border border-[#1E293B]">
+          <div
+            class="bg-gradient-to-r from-[#3B82F6] to-[#60A5FA] h-full transition-all duration-1000 ease-linear rounded-full"
+            :style="{
+              width: `${
+                queueStore.wakeupRecovery.totalSeconds > 0
+                  ? Math.round(
+                      ((queueStore.wakeupRecovery.totalSeconds - queueStore.wakeupRecovery.remainingSeconds) /
+                        queueStore.wakeupRecovery.totalSeconds) *
+                        100
+                    )
+                  : 0
+              }%`
+            }"
+          ></div>
+        </div>
+      </div>
+
+      <!-- Jitter Countdown Card (Story 4.2 & 4.3) -->
+      <div
+        v-if="queueStore.isJitterWaiting || (queueStore.isQueuePaused && queueStore.queueTick.remainingSeconds > 0)"
+        id="queue-jitter-countdown-banner"
+        class="bg-[#131B26] border-2 rounded-xl p-5 shadow-[0_0_25px_rgba(245,158,11,0.15)] space-y-3 animate-fade-in"
+        :class="queueStore.isQueuePaused ? 'border-[#F59E0B]/60 bg-[#131B26]/80' : 'border-[#F59E0B]'"
+      >
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <div
+              class="w-9 h-9 rounded-full flex items-center justify-center text-lg shrink-0"
+              :class="
+                queueStore.isQueuePaused
+                  ? 'bg-[#F59E0B]/10 border border-[#F59E0B]/30 text-[#F59E0B]'
+                  : 'bg-[#F59E0B]/20 border border-[#F59E0B]/50 text-[#F59E0B]'
+              "
+            >
+              ⏳
+            </div>
+            <div>
+              <div class="flex items-center space-x-2">
+                <span
+                  class="px-2 py-0.5 rounded text-[10px] font-bold uppercase"
+                  :class="queueStore.isQueuePaused ? 'bg-[#F59E0B]/20 text-[#F59E0B]' : 'bg-[#F59E0B] text-[#0B111A]'"
+                >
+                  {{ queueStore.isQueuePaused ? 'Jitter Đang Tạm Dừng' : 'Anti-ban Jitter Đang Kích Hoạt' }}
+                </span>
+                <span class="text-xs text-[#94A3B8]">Giãn cách an toàn giữa 2 bài đăng</span>
+              </div>
+              <h3 class="text-sm font-bold text-[#F1F5F9] mt-0.5">
+                {{
+                  queueStore.isQueuePaused
+                    ? 'Hàng đợi đang tạm dừng. Bộ đếm thời gian nghỉ Jitter được bảo lưu, bấm "Tiếp tục" để đếm tiếp.'
+                    : 'Hệ thống đang nghỉ ngơi ngẫu nhiên để bảo vệ tài khoản khỏi thuật toán chống bot'
+                }}
+              </h3>
+            </div>
+          </div>
+
+          <div class="text-right">
+            <div class="text-[10px] text-[#94A3B8] uppercase tracking-wider font-semibold">Thời gian còn lại</div>
+            <div id="queue-countdown-timer" class="text-2xl font-black font-mono text-[#F59E0B] tracking-tight">
+              {{ queueStore.queueTick.formattedCountdown }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress bar -->
+        <div class="w-full bg-[#0B111A] h-2 rounded-full overflow-hidden border border-[#1E293B]">
+          <div
+            class="bg-gradient-to-r from-[#F59E0B] to-[#10B981] h-full transition-all duration-1000 ease-linear rounded-full"
+            :style="{
+              width: `${
+                queueStore.queueTick.totalSeconds > 0
+                  ? Math.round(
+                      ((queueStore.queueTick.totalSeconds - queueStore.queueTick.remainingSeconds) /
+                        queueStore.queueTick.totalSeconds) *
+                        100
+                    )
+                  : 0
+              }%`
+            }"
+          ></div>
+        </div>
+      </div>
+
+      <!-- Emergency Pause Warning Box (Story 1.4 & Story 5.3) -->
+      <div
+        v-if="queueStore.isEmergencyPaused || queueStore.authPausedCount > 0"
+        class="bg-[#131B26] border-4 border-double border-[#EF4444] rounded-xl p-5 shadow-[0_0_25px_rgba(239,68,68,0.25)] space-y-4 animate-fade-in"
+        role="alert"
+        aria-live="polite"
+      >
+        <div class="flex items-start justify-between">
+          <div class="flex items-start space-x-3.5">
+            <div class="w-9 h-9 rounded-full bg-[#EF4444]/20 border border-[#EF4444]/50 flex items-center justify-center text-[#EF4444] shrink-0 mt-0.5">
+              <AlertTriangle class="w-5 h-5" />
+            </div>
+            <div>
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#EF4444] text-[#0B111A]">
+                  Phòng vệ khẩn cấp (Emergency Pause)
+                </span>
+                <span class="text-xs text-[#94A3B8]">
+                  {{ queueStore.emergencyPauseTimestamp ? new Date(queueStore.emergencyPauseTimestamp).toLocaleTimeString('vi-VN') : '' }}
+                </span>
+              </div>
+              <h3 class="text-sm font-bold text-[#F1F5F9] mt-1">
+                Toàn bộ hàng đợi đã tạm dừng an toàn do Facebook yêu cầu xác minh bảo mật hoặc hết hạn phiên
+              </h3>
+              <p class="text-xs text-[#94A3B8] mt-1 leading-relaxed">
+                Lý do: <span class="text-[#EF4444] font-medium">{{ queueStore.emergencyPauseReason || 'Phát hiện phiên hết hạn hoặc yêu cầu Checkpoint' }}</span>.
+                Hiện có <strong class="text-[#F1F5F9]">{{ queueStore.authPausedCount }} bài viết</strong> đang ở trạng thái <code class="text-[#EF4444] font-mono text-[11px] bg-[#EF4444]/10 px-1 py-0.5 rounded">[Paused - Auth Required]</code>.
+              </p>
+            </div>
+          </div>
+
+          <!-- Action Button -->
+          <div class="flex items-center space-x-2 shrink-0">
+            <template v-if="accountStore.account?.status === 'connected'">
+              <button
+                class="px-4 py-2 rounded-lg bg-[#10B981] hover:bg-[#059669] text-[#042419] font-bold text-xs shadow-md transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                :disabled="queueStore.isResuming"
+                @click="handleResumeAuthPaused"
+              >
+                <span v-if="queueStore.isResuming" class="w-2 h-2 rounded-full bg-[#042419] animate-ping"></span>
+                <span>{{ queueStore.isResuming ? 'Đang khôi phục...' : 'Tiếp tục hàng đợi (Resume Queue)' }}</span>
+              </button>
+            </template>
+            <template v-else>
+              <button
+                class="px-4 py-2 rounded-lg bg-[#EF4444] hover:bg-[#DC2626] text-white font-bold text-xs shadow-md transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                :disabled="accountStore.isLoggingIn"
+                @click="handleReLogin"
+              >
+                <span v-if="accountStore.isLoggingIn" class="w-2 h-2 rounded-full bg-white animate-ping"></span>
+                <span>{{ accountStore.isLoggingIn ? 'Đang mở WebView...' : 'Mở WebView xử lý ngay' }}</span>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <!-- Ảnh chụp màn hình sự cố Checkpoint minh chứng (Story 5.3) -->
+        <div v-if="screenshotDataUrl" class="mt-2 pt-3 border-t border-[#EF4444]/20 flex items-center justify-between">
+          <div class="flex items-center space-x-3.5">
+            <div
+              class="relative group cursor-pointer shrink-0 rounded-lg overflow-hidden border border-[#EF4444]/40 hover:border-[#EF4444] transition-all shadow-sm"
+              title="Nhấp để xem ảnh chụp màn hình kích thước lớn"
+              @click="showScreenshotModal = true"
+            >
+              <img
+                :src="screenshotDataUrl"
+                alt="Ảnh chụp màn hình Checkpoint"
+                class="w-24 h-16 object-cover group-hover:scale-105 transition-transform"
+              />
+              <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                <Maximize2 class="w-4 h-4 text-white" />
+              </div>
+            </div>
+            <div>
+              <div class="flex items-center space-x-1.5 text-xs font-semibold text-[#F1F5F9]">
+                <Camera class="w-3.5 h-3.5 text-[#EF4444]" />
+                <span>Ảnh chụp màn hình sự cố Playwright</span>
+              </div>
+              <p class="text-[11px] text-[#94A3B8] mt-0.5 leading-relaxed">
+                Bằng chứng xác thực tại thời điểm phát hiện Checkpoint. Bấm vào ảnh để xem chi tiết chẩn đoán lỗi.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filter Tabs Queue -->
+      <div class="flex items-center justify-between border-b border-[#1E293B] pb-1 overflow-x-auto">
+        <div class="flex items-center space-x-1">
+          <button
+            v-for="tab in queueFilterTabs"
+            :key="tab.id"
+            :class="[
+              'px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center space-x-2 cursor-pointer',
+              filterStatusQueue === tab.id
+                ? 'bg-[#1E293B] text-[#F1F5F9] shadow-sm'
+                : 'text-[#94A3B8] hover:text-[#CBD5E1] hover:bg-[#131B26]'
+            ]"
+            @click="filterStatusQueue = tab.id"
+          >
+            <span>{{ tab.label }}</span>
+            <span
+              class="px-1.5 py-0.2 rounded-full text-[10px] font-mono"
+              :class="
+                filterStatusQueue === tab.id
+                  ? 'bg-[#0B111A] text-[#10B981]'
+                  : 'bg-[#1E293B]/60 text-[#64748B]'
+              "
+            >
+              {{ getQueueTabCount(tab.id) }}
+            </span>
+          </button>
+        </div>
+
+        <!-- Action helper -->
+        <span class="text-[11px] text-[#64748B] hidden md:inline">
+          Máy trạng thái đơn luồng FIFO • Tự động áp dụng Jitter giữa các bài
+        </span>
+      </div>
+
+      <!-- Empty State Queue -->
+      <div
+        v-if="currentQueueTasks.length === 0"
+        class="bg-[#131B26] border border-[#1E293B] rounded-xl p-10 text-center space-y-3"
+      >
+        <div class="w-12 h-12 rounded-full bg-[#1E293B] text-[#64748B] flex items-center justify-center mx-auto">
+          <Clock class="w-6 h-6" />
+        </div>
+        <h3 class="text-sm font-semibold text-[#F1F5F9]">
+          {{ filterStatusQueue === 'all' ? 'Hàng đợi đang trống' : 'Không có tác vụ nào khớp bộ lọc hàng đợi' }}
+        </h3>
+        <p class="text-xs text-[#94A3B8] max-w-sm mx-auto">
+          {{
+            filterStatusQueue === 'all'
+              ? 'Chưa có bài viết nào đang chờ phát hành. Hãy chuyển sang tab Soạn Thảo để lên lịch chiến dịch mới.'
+              : 'Vui lòng chọn bộ lọc khác để kiểm tra tác vụ.'
+          }}
+        </p>
+      </div>
+
+      <!-- Queue Tasks Table -->
+      <div
+        v-else
+        class="bg-[#131B26] border border-[#1E293B] rounded-xl overflow-hidden shadow-lg"
+      >
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-[#CBD5E1]">
+            <thead class="bg-[#0B111A] text-[#94A3B8] text-[11px] uppercase tracking-wider border-b border-[#1E293B]">
+              <tr>
+                <th scope="col" class="py-3 px-4 font-semibold">Tác vụ / Chiến dịch</th>
+                <th scope="col" class="py-3 px-4 font-semibold">Nhóm đích</th>
+                <th scope="col" class="py-3 px-4 font-semibold">Nội dung</th>
+                <th scope="col" class="py-3 px-4 font-semibold">Lên lịch</th>
+                <th scope="col" class="py-3 px-4 font-semibold text-center">Trạng thái</th>
+                <th scope="col" class="py-3 px-4 font-semibold text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[#1E293B]">
+              <tr
+                v-for="task in currentQueueTasks"
+                :key="task.id"
+                class="hover:bg-[#1A2333] transition-colors"
+              >
+                <!-- Campaign & Task Info -->
+                <td class="py-3.5 px-4 font-medium text-[#F1F5F9] max-w-[180px]">
+                  <div class="truncate font-semibold text-sm text-[#F1F5F9]">
+                    {{ task.campaign_title || 'Chiến dịch không tên' }}
                   </div>
-                  <div class="truncate">
-                    <div class="truncate text-xs text-[#F1F5F9] font-medium">
-                      {{ task.target_name || 'Đích đăng #' + task.target_id.slice(0, 6) }}
+                  <div class="text-[10px] text-[#64748B] font-mono mt-0.5 truncate">
+                    ID: {{ task.id.slice(0, 8) }}...
+                  </div>
+                </td>
+
+                <!-- Target Info -->
+                <td class="py-3.5 px-4 max-w-[160px]">
+                  <div class="flex items-center space-x-2">
+                    <div class="w-6 h-6 rounded-full bg-[#1E293B] flex items-center justify-center text-[10px] text-[#94A3B8] shrink-0 overflow-hidden border border-[#334155]">
+                      <img
+                        v-if="task.target_avatar_url"
+                        :src="task.target_avatar_url"
+                        alt=""
+                        class="w-full h-full object-cover"
+                      />
+                      <span v-else>{{ task.target_type === 'group' ? '👥' : '👤' }}</span>
                     </div>
-                    <span class="text-[10px] text-[#64748B]">
-                      {{ task.target_type === 'group' ? 'Nhóm Facebook' : 'Trang cá nhân' }}
+                    <div class="truncate">
+                      <div class="truncate text-xs text-[#F1F5F9] font-medium">
+                        {{ task.target_name || 'Đích đăng #' + task.target_id.slice(0, 6) }}
+                      </div>
+                      <span class="text-[10px] text-[#64748B]">
+                        {{ task.target_type === 'group' ? 'Nhóm Facebook' : 'Trang cá nhân' }}
+                      </span>
+                    </div>
+                  </div>
+                </td>
+
+                <!-- Content Excerpt & Media -->
+                <td class="py-3.5 px-4 max-w-[240px]">
+                  <div class="line-clamp-2 text-xs text-[#CBD5E1] leading-relaxed">
+                    {{ task.resolved_spintax_text }}
+                  </div>
+                  <div v-if="task.media_paths && task.media_paths.length > 0" class="flex items-center space-x-1 mt-1">
+                    <span class="inline-flex items-center space-x-1 px-1.5 py-0.2 rounded text-[10px] bg-[#0B111A] text-[#94A3B8] border border-[#1E293B]">
+                      <ImageIcon class="w-2.5 h-2.5" />
+                      <span>{{ task.media_paths.length }} ảnh</span>
                     </span>
                   </div>
-                </div>
-              </td>
+                </td>
 
-              <!-- Content Excerpt & Media -->
-              <td class="py-3.5 px-4 max-w-[240px]">
-                <div class="line-clamp-2 text-xs text-[#CBD5E1] leading-relaxed">
-                  {{ task.resolved_spintax_text }}
-                </div>
-                <div v-if="task.media_paths && task.media_paths.length > 0" class="flex items-center space-x-1 mt-1">
-                  <span class="inline-flex items-center space-x-1 px-1.5 py-0.2 rounded text-[10px] bg-[#0B111A] text-[#94A3B8] border border-[#1E293B]">
-                    <ImageIcon class="w-2.5 h-2.5" />
+                <!-- Scheduled At -->
+                <td class="py-3.5 px-4 whitespace-nowrap text-xs text-[#94A3B8]">
+                  <div>{{ formatTime(task.scheduled_at) }}</div>
+                  <div class="text-[10px] text-[#64748B]">{{ formatDate(task.scheduled_at) }}</div>
+                </td>
+
+                <!-- Status Badge -->
+                <td class="py-3.5 px-4 text-center whitespace-nowrap">
+                  <span
+                    class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider cursor-help"
+                    :class="getStatusBadgeClass(task.status)"
+                    :title="getStatusTooltip(task)"
+                  >
+                    <span class="w-1.5 h-1.5 rounded-full mr-1.5" :class="getStatusDotClass(task.status)"></span>
+                    {{ getStatusLabel(task.status, task.retry_count) }}
+                  </span>
+                  <div v-if="task.error_message" class="text-[10px] text-[#EF4444] mt-1 max-w-[150px] truncate mx-auto" :title="task.error_message">
+                    {{ task.error_message }}
+                  </div>
+                </td>
+
+                <!-- Action Buttons -->
+                <td class="py-3.5 px-4 text-right whitespace-nowrap">
+                  <div class="flex items-center justify-end space-x-1.5">
+                    <!-- Cancel Task Button -->
+                    <button
+                      v-if="['scheduled', 'paused', 'retrying', 'jitter_waiting'].includes(task.status)"
+                      class="px-2.5 py-1 rounded bg-[#EF4444]/15 hover:bg-[#EF4444]/25 text-[#EF4444] border border-[#EF4444]/30 font-medium text-[11px] transition-all cursor-pointer flex items-center space-x-1"
+                      title="Hủy bài đăng này"
+                      @click="handleCancelTask(task.id)"
+                    >
+                      <XCircle class="w-3 h-3" />
+                      <span>Hủy</span>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </template>
+
+    <!-- TAB 2: LỊCH SỬ ĐĂNG BÀI (Story 5.4) -->
+    <template v-else-if="activeMainTab === 'history'">
+      <!-- Filter Tabs History -->
+      <div class="flex items-center justify-between border-b border-[#1E293B] pb-1 overflow-x-auto">
+        <div class="flex items-center space-x-1">
+          <button
+            v-for="tab in historyFilterTabs"
+            :key="tab.id"
+            :class="[
+              'px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center space-x-2 cursor-pointer',
+              filterStatusHistory === tab.id
+                ? 'bg-[#1E293B] text-[#F1F5F9] shadow-sm'
+                : 'text-[#94A3B8] hover:text-[#CBD5E1] hover:bg-[#131B26]'
+            ]"
+            @click="filterStatusHistory = tab.id"
+          >
+            <span>{{ tab.label }}</span>
+            <span
+              class="px-1.5 py-0.2 rounded-full text-[10px] font-mono"
+              :class="
+                filterStatusHistory === tab.id
+                  ? 'bg-[#0B111A] text-[#3B82F6]'
+                  : 'bg-[#1E293B]/60 text-[#64748B]'
+              "
+            >
+              {{ getHistoryTabCount(tab.id) }}
+            </span>
+          </button>
+        </div>
+
+        <span class="text-[11px] text-[#64748B] hidden md:inline">
+          Lưu trữ toàn bộ kết quả phát hành • Mở bài trực tiếp & chẩn đoán lỗi minh bạch
+        </span>
+      </div>
+
+      <!-- Empty State History -->
+      <div
+        v-if="currentHistoryTasks.length === 0"
+        class="bg-[#131B26] border border-[#1E293B] rounded-xl p-10 text-center space-y-3"
+      >
+        <div class="w-12 h-12 rounded-full bg-[#1E293B] text-[#64748B] flex items-center justify-center mx-auto">
+          <History class="w-6 h-6" />
+        </div>
+        <h3 class="text-sm font-semibold text-[#F1F5F9]">
+          {{ filterStatusHistory === 'all' ? 'Chưa có lịch sử bài đăng nào' : 'Không có bài đăng nào khớp bộ lọc lịch sử' }}
+        </h3>
+        <p class="text-xs text-[#94A3B8] max-w-sm mx-auto">
+          {{
+            filterStatusHistory === 'all'
+              ? 'Khi các bài viết được xử lý (thành công, chờ admin duyệt hoặc thất bại), lịch sử chi tiết sẽ hiển thị tại đây.'
+              : 'Vui lòng chọn bộ lọc khác để xem thêm bài viết.'
+          }}
+        </p>
+      </div>
+
+      <!-- History Compact Table (Story 5.4) -->
+      <div
+        v-else
+        class="bg-[#131B26] border border-[#1E293B] rounded-xl overflow-hidden shadow-lg"
+      >
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-[#CBD5E1]">
+            <thead class="bg-[#0B111A] text-[#94A3B8] text-[11px] uppercase tracking-wider border-b border-[#1E293B]">
+              <tr>
+                <th scope="col" class="py-3 px-4 font-semibold">Thời gian đăng</th>
+                <th scope="col" class="py-3 px-4 font-semibold">Tên đích đăng</th>
+                <th scope="col" class="py-3 px-4 font-semibold">Nội dung tóm tắt</th>
+                <th scope="col" class="py-3 px-4 font-semibold text-center">Số lượng ảnh</th>
+                <th scope="col" class="py-3 px-4 font-semibold text-center">Trạng thái</th>
+                <th scope="col" class="py-3 px-4 font-semibold text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[#1E293B]">
+              <tr
+                v-for="task in currentHistoryTasks"
+                :key="task.id"
+                class="hover:bg-[#1A2333] transition-colors"
+              >
+                <!-- Cột 1: Thời gian đăng -->
+                <td class="py-3.5 px-4 whitespace-nowrap text-xs text-[#CBD5E1]">
+                  <div class="font-medium text-[#F1F5F9]">{{ formatTime(task.executed_at || task.updated_at || task.scheduled_at) }}</div>
+                  <div class="text-[10px] text-[#64748B]">{{ formatDate(task.executed_at || task.updated_at || task.scheduled_at) }}</div>
+                </td>
+
+                <!-- Cột 2: Tên đích đăng -->
+                <td class="py-3.5 px-4 max-w-[170px]">
+                  <div class="flex items-center space-x-2">
+                    <div class="w-6 h-6 rounded-full bg-[#1E293B] flex items-center justify-center text-[10px] text-[#94A3B8] shrink-0 overflow-hidden border border-[#334155]">
+                      <img
+                        v-if="task.target_avatar_url"
+                        :src="task.target_avatar_url"
+                        alt=""
+                        class="w-full h-full object-cover"
+                      />
+                      <span v-else>{{ task.target_type === 'group' ? '👥' : '👤' }}</span>
+                    </div>
+                    <div class="truncate">
+                      <div class="truncate text-xs text-[#F1F5F9] font-medium" :title="task.target_name">
+                        {{ task.target_name || 'Đích đăng #' + task.target_id.slice(0, 6) }}
+                      </div>
+                      <span class="text-[10px] text-[#64748B]">
+                        {{ task.target_type === 'group' ? 'Nhóm Facebook' : 'Trang cá nhân' }}
+                      </span>
+                    </div>
+                  </div>
+                </td>
+
+                <!-- Cột 3: Nội dung tóm tắt -->
+                <td class="py-3.5 px-4 max-w-[260px]">
+                  <div class="line-clamp-2 text-xs text-[#CBD5E1] leading-relaxed" :title="task.resolved_spintax_text">
+                    {{ task.resolved_spintax_text }}
+                  </div>
+                  <div class="text-[10px] text-[#64748B] mt-0.5 truncate">
+                    {{ task.campaign_title || 'Chiến dịch không tên' }}
+                  </div>
+                </td>
+
+                <!-- Cột 4: Số lượng ảnh -->
+                <td class="py-3.5 px-4 text-center whitespace-nowrap">
+                  <span
+                    v-if="task.media_paths && task.media_paths.length > 0"
+                    class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-mono bg-[#0B111A] text-[#38BDF8] border border-[#0284C7]/30"
+                  >
+                    <ImageIcon class="w-3 h-3 text-[#38BDF8]" />
                     <span>{{ task.media_paths.length }} ảnh</span>
                   </span>
-                </div>
-              </td>
+                  <span v-else class="text-[#64748B] text-xs font-mono">-</span>
+                </td>
 
-              <!-- Scheduled At -->
-              <td class="py-3.5 px-4 whitespace-nowrap text-xs text-[#94A3B8]">
-                <div>{{ formatTime(task.scheduled_at) }}</div>
-                <div class="text-[10px] text-[#64748B]">{{ formatDate(task.scheduled_at) }}</div>
-              </td>
-
-              <!-- Status Badge -->
-              <td class="py-3.5 px-4 text-center whitespace-nowrap">
-                <span
-                  class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider cursor-help"
-                  :class="getStatusBadgeClass(task.status)"
-                  :title="getStatusTooltip(task)"
-                >
-                  <span class="w-1.5 h-1.5 rounded-full mr-1.5" :class="getStatusDotClass(task.status)"></span>
-                  {{ getStatusLabel(task.status, task.retry_count) }}
-                </span>
-                <div v-if="task.error_message" class="text-[10px] text-[#EF4444] mt-1 max-w-[150px] truncate mx-auto" :title="task.error_message">
-                  {{ task.error_message }}
-                </div>
-              </td>
-
-              <!-- Action Buttons -->
-              <td class="py-3.5 px-4 text-right whitespace-nowrap">
-                <div class="flex items-center justify-end space-x-1.5">
-                  <!-- Cancel Task Button (only for cancellable statuses) -->
-                  <button
-                    v-if="['scheduled', 'paused', 'retrying', 'jitter_waiting'].includes(task.status)"
-                    class="px-2.5 py-1 rounded bg-[#EF4444]/15 hover:bg-[#EF4444]/25 text-[#EF4444] border border-[#EF4444]/30 font-medium text-[11px] transition-all cursor-pointer flex items-center space-x-1"
-                    title="Hủy bài đăng này"
-                    @click="handleCancelTask(task.id)"
+                <!-- Cột 5: Badge trạng thái rõ ràng -->
+                <td class="py-3.5 px-4 text-center whitespace-nowrap">
+                  <span
+                    class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider cursor-help"
+                    :class="getStatusBadgeClass(task.status)"
+                    :title="getStatusTooltip(task)"
                   >
-                    <XCircle class="w-3 h-3" />
-                    <span>Hủy</span>
-                  </button>
+                    <span class="w-1.5 h-1.5 rounded-full mr-1.5" :class="getStatusDotClass(task.status)"></span>
+                    {{ getStatusLabel(task.status, task.retry_count) }}
+                  </span>
+                  <div v-if="task.error_message" class="text-[10px] text-[#EF4444] mt-1 max-w-[150px] truncate mx-auto" :title="task.error_message">
+                    {{ task.error_message }}
+                  </div>
+                </td>
 
-                  <!-- Retry Task Button (only for failed status) -->
-                  <button
-                    v-if="task.status === 'failed'"
-                    class="px-2.5 py-1 rounded bg-[#3B82F6]/15 hover:bg-[#3B82F6]/25 text-[#60A5FA] border border-[#3B82F6]/30 font-medium text-[11px] transition-all cursor-pointer flex items-center space-x-1"
-                    title="Thử lại bài đăng này"
-                    @click="handleRetryTask(task.id)"
-                  >
-                    <RotateCcw class="w-3 h-3" />
-                    <span>Thử lại</span>
-                  </button>
+                <!-- Cột 6: Thao tác -->
+                <td class="py-3.5 px-4 text-right whitespace-nowrap">
+                  <div class="flex items-center justify-end space-x-1.5">
+                    <!-- Nút Xem bài ↗ (Thành công / có permalink) -->
+                    <button
+                      v-if="(task.status === 'success' || task.status === 'admin_pending') && task.permalink"
+                      :id="`btn-view-post-${task.id}`"
+                      class="px-2.5 py-1 rounded bg-[#10B981]/15 hover:bg-[#10B981]/25 text-[#10B981] border border-[#10B981]/30 font-medium text-[11px] transition-all flex items-center space-x-1 cursor-pointer"
+                      title="Mở bài viết trực tiếp trên trình duyệt mặc định"
+                      @click="handleOpenPermalink(task.permalink)"
+                    >
+                      <ExternalLink class="w-3 h-3" />
+                      <span>Xem bài ↗</span>
+                    </button>
 
-                  <!-- Open Permalink if success -->
-                  <a
-                    v-if="task.status === 'success' && task.permalink"
-                    :href="task.permalink"
-                    target="_blank"
-                    class="px-2.5 py-1 rounded bg-[#10B981]/15 hover:bg-[#10B981]/25 text-[#10B981] border border-[#10B981]/30 font-medium text-[11px] transition-all flex items-center space-x-1"
-                    title="Xem bài viết trên Facebook"
-                  >
-                    <ExternalLink class="w-3 h-3" />
-                    <span>Xem bài</span>
-                  </a>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                    <!-- Biểu tượng Camera chẩn đoán lỗi (Thất bại) -->
+                    <button
+                      v-if="task.status === 'failed'"
+                      :id="`btn-diagnostic-${task.id}`"
+                      class="px-2.5 py-1 rounded bg-[#EF4444]/15 hover:bg-[#EF4444]/25 text-[#EF4444] border border-[#EF4444]/30 font-medium text-[11px] transition-all flex items-center space-x-1 cursor-pointer"
+                      title="Xem chẩn đoán lỗi và ảnh chụp sự cố Playwright"
+                      @click="openDiagnosticModal(task)"
+                    >
+                      <Camera class="w-3 h-3" />
+                      <span>Chẩn đoán</span>
+                    </button>
+
+                    <!-- Nút Thử lại bài viết (Thất bại) -->
+                    <button
+                      v-if="task.status === 'failed'"
+                      :id="`btn-retry-history-${task.id}`"
+                      class="px-2.5 py-1 rounded bg-[#3B82F6]/15 hover:bg-[#3B82F6]/25 text-[#60A5FA] border border-[#3B82F6]/30 font-medium text-[11px] transition-all cursor-pointer flex items-center space-x-1"
+                      title="Thử lại bài đăng này"
+                      @click="handleRetryTask(task.id)"
+                    >
+                      <RotateCcw class="w-3 h-3" />
+                      <span>Thử lại</span>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </template>
 
     <!-- Modal Xem Chi Tiết Ảnh Chụp Màn Hình Sự Cố (Story 5.3) -->
     <div
@@ -521,6 +736,157 @@
         </div>
       </div>
     </div>
+
+    <!-- Modal Chẩn Đoán Lỗi Bài Viết Thất Bại (Story 5.4) -->
+    <div
+      v-if="showDiagnosticModal && diagnosticTask"
+      id="diagnostic-modal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in"
+      @click.self="closeDiagnosticModal"
+    >
+      <div class="bg-[#131B26] border border-[#1E293B] rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+        <!-- Header Modal -->
+        <div class="px-5 py-4 border-b border-[#1E293B] flex items-center justify-between bg-[#0B111A]">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-8 h-8 rounded-lg bg-[#EF4444]/20 border border-[#EF4444]/40 flex items-center justify-center text-[#EF4444]">
+              <AlertTriangle class="w-4 h-4" />
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-[#F1F5F9]">Chẩn Đoán Sự Cố Đăng Bài</h3>
+              <p class="text-[11px] text-[#94A3B8]">Chi tiết lỗi và ảnh chụp màn hình Playwright capture tại thời điểm xảy ra sự cố</p>
+            </div>
+          </div>
+          <button
+            id="btn-close-diagnostic-modal"
+            class="text-[#94A3B8] hover:text-white p-1 rounded-lg hover:bg-[#1E293B] transition-colors cursor-pointer"
+            title="Đóng"
+            @click="closeDiagnosticModal"
+          >
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+
+        <!-- Body Modal -->
+        <div class="p-5 overflow-y-auto space-y-4 text-xs">
+          <!-- Info Grid -->
+          <div class="grid grid-cols-2 gap-3 bg-[#0B111A] p-3.5 rounded-lg border border-[#1E293B]">
+            <div>
+              <span class="text-[#64748B] text-[11px]">Chiến dịch:</span>
+              <p class="text-[#F1F5F9] font-medium truncate">{{ diagnosticTask.campaign_title || 'Chiến dịch không tên' }}</p>
+            </div>
+            <div>
+              <span class="text-[#64748B] text-[11px]">Đích đăng:</span>
+              <p class="text-[#F1F5F9] font-medium truncate">{{ diagnosticTask.target_name || diagnosticTask.target_id }}</p>
+            </div>
+            <div>
+              <span class="text-[#64748B] text-[11px]">Thời điểm xảy ra sự cố:</span>
+              <p class="text-[#CBD5E1] font-mono">{{ formatDateTime(diagnosticTask.executed_at || diagnosticTask.updated_at) }}</p>
+            </div>
+            <div>
+              <span class="text-[#64748B] text-[11px]">Mã lỗi (Error Code):</span>
+              <p id="diagnostic-error-code" class="text-[#EF4444] font-mono font-bold">{{ diagnosticTask.error_code || 'UNKNOWN_ERROR' }}</p>
+            </div>
+            <div class="col-span-2 pt-2 border-t border-[#1E293B]">
+              <span class="text-[#64748B] text-[11px]">Thông báo lỗi chi tiết:</span>
+              <p id="diagnostic-error-message" class="text-[#EF4444] font-medium mt-0.5 leading-relaxed bg-[#EF4444]/10 p-2.5 rounded border border-[#EF4444]/20">
+                {{ diagnosticTask.error_message || 'Không có thông báo lỗi chi tiết' }}
+              </p>
+            </div>
+          </div>
+
+          <!-- Screenshot Section -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-[#F1F5F9] flex items-center space-x-1.5">
+                <Camera class="w-3.5 h-3.5 text-[#3B82F6]" />
+                <span>Ảnh chụp màn hình sự cố (Playwright Screenshot)</span>
+              </span>
+              <span v-if="diagnosticScreenshotUrl" class="text-[10px] text-[#64748B]">
+                Nhấp vào ảnh để phóng to
+              </span>
+            </div>
+
+            <div
+              v-if="isLoadingDiagnosticScreenshot"
+              class="h-44 rounded-lg bg-[#0B111A] border border-[#1E293B] flex items-center justify-center text-[#94A3B8]"
+            >
+              <RotateCcw class="w-5 h-5 animate-spin mr-2" />
+              <span>Đang tải ảnh chụp sự cố...</span>
+            </div>
+
+            <div
+              v-else-if="diagnosticScreenshotUrl"
+              id="diagnostic-screenshot-container"
+              class="relative group rounded-lg overflow-hidden border border-[#1E293B] bg-[#0B111A] cursor-pointer"
+              @click="showZoomedScreenshot = true"
+            >
+              <img
+                :src="diagnosticScreenshotUrl"
+                alt="Ảnh chụp màn hình sự cố"
+                class="w-full max-h-64 object-contain bg-black/40"
+              />
+              <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                <div class="px-3 py-1.5 rounded-lg bg-[#0B111A]/80 text-white text-xs flex items-center space-x-1.5 border border-white/20">
+                  <Maximize2 class="w-3.5 h-3.5" />
+                  <span>Phóng to toàn màn hình</span>
+                </div>
+              </div>
+            </div>
+
+            <div
+              v-else
+              id="diagnostic-no-screenshot"
+              class="p-6 rounded-lg bg-[#0B111A] border border-[#1E293B] text-center text-[#64748B] space-y-1"
+            >
+              <Camera class="w-6 h-6 mx-auto text-[#475569]" />
+              <p class="text-xs text-[#94A3B8]">Không có ảnh chụp màn hình sự cố</p>
+              <p class="text-[10px]">Tác vụ này có thể gặp lỗi trước khi kịp chụp màn hình hoặc file ảnh không còn tồn tại trên máy.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer Modal -->
+        <div class="px-5 py-3 border-t border-[#1E293B] flex items-center justify-between bg-[#0B111A]">
+          <button
+            class="px-4 py-2 rounded-lg bg-[#1E293B] hover:bg-[#334155] text-[#CBD5E1] text-xs font-semibold transition-all cursor-pointer"
+            @click="closeDiagnosticModal"
+          >
+            Đóng
+          </button>
+
+          <button
+            id="btn-modal-retry-task"
+            class="px-4 py-2 rounded-lg bg-[#3B82F6] hover:bg-[#2563EB] text-white text-xs font-bold shadow-md transition-all flex items-center space-x-1.5 cursor-pointer"
+            @click="handleRetryFromModal(diagnosticTask.id)"
+          >
+            <RotateCcw class="w-3.5 h-3.5" />
+            <span>Thử lại bài đăng này</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Phóng To Ảnh Chụp Màn Hình Chẩn Đoán -->
+    <div
+      v-if="showZoomedScreenshot && diagnosticScreenshotUrl"
+      class="fixed inset-0 z-60 flex items-center justify-center bg-black/90 backdrop-blur-md p-6 animate-fade-in"
+      @click.self="showZoomedScreenshot = false"
+    >
+      <div class="relative max-w-5xl max-h-[95vh] flex flex-col">
+        <button
+          class="absolute top-2 right-2 z-10 p-2 rounded-full bg-black/70 text-white hover:bg-black transition-colors cursor-pointer"
+          title="Đóng phóng to"
+          @click="showZoomedScreenshot = false"
+        >
+          <X class="w-5 h-5" />
+        </button>
+        <img
+          :src="diagnosticScreenshotUrl"
+          alt="Ảnh chụp màn hình phóng to"
+          class="max-w-full max-h-[90vh] rounded-lg border border-[#1E293B] object-contain shadow-2xl"
+        />
+      </div>
+    </div>
   </div>
 </template>
 
@@ -537,18 +903,34 @@ import {
   Image as ImageIcon,
   Camera,
   Maximize2,
-  X
+  X,
+  History,
+  ListOrdered
 } from 'lucide-vue-next'
 import { useAccountStore } from '../stores/account'
 import { useQueueStore } from '../stores/queue'
 import { useSettingsStore } from '../stores/settings'
+import type { TaskDTO } from '../../../preload/types'
 
 const accountStore = useAccountStore()
 const queueStore = useQueueStore()
 const settingsStore = useSettingsStore()
+
+const activeMainTab = ref<'queue' | 'history'>('queue')
+const filterStatusQueue = ref<string>('all')
+const filterStatusHistory = ref<string>('all')
 const isRefreshing = ref(false)
+
+// Screenshot sự cố checkpoint banner
 const showScreenshotModal = ref(false)
 const screenshotDataUrl = ref<string | null>(null)
+
+// Modal chẩn đoán lỗi bài đăng thất bại (Story 5.4)
+const showDiagnosticModal = ref(false)
+const diagnosticTask = ref<TaskDTO | null>(null)
+const diagnosticScreenshotUrl = ref<string | null>(null)
+const isLoadingDiagnosticScreenshot = ref(false)
+const showZoomedScreenshot = ref(false)
 
 const emergencyScreenshotPath = computed(() => {
   if (queueStore.emergencyPauseScreenshot) return queueStore.emergencyPauseScreenshot
@@ -577,15 +959,40 @@ watch(
   { immediate: true }
 )
 
-const filterTabs = [
+const queueFilterTabs = [
   { id: 'all', label: 'Tất cả' },
   { id: 'scheduled', label: 'Đang chờ' },
   { id: 'running', label: 'Đang chạy' },
   { id: 'paused', label: 'Tạm dừng' },
+  { id: 'retrying', label: 'Đang thử lại' }
+]
+
+const historyFilterTabs = [
+  { id: 'all', label: 'Tất cả lịch sử' },
   { id: 'success', label: 'Thành công' },
+  { id: 'admin_pending', label: 'Chờ admin duyệt' },
   { id: 'failed', label: 'Thất bại' },
   { id: 'cancelled', label: 'Đã hủy' }
 ]
+
+const currentQueueTasks = computed(() => {
+  const list = queueStore.activeQueueTasks
+  if (filterStatusQueue.value === 'all') return list
+  if (filterStatusQueue.value === 'paused') {
+    return list.filter((t) => t.status === 'paused' || t.status === 'auth_paused')
+  }
+  return list.filter((t) => t.status === filterStatusQueue.value)
+})
+
+const currentHistoryTasks = computed(() => {
+  const list = queueStore.historyTasks
+  const filtered = filterStatusHistory.value === 'all' ? list : list.filter((t) => t.status === filterStatusHistory.value)
+  return [...filtered].sort((a, b) => {
+    const timeA = new Date(a.executed_at || a.updated_at || a.scheduled_at).getTime()
+    const timeB = new Date(b.executed_at || b.updated_at || b.scheduled_at).getTime()
+    return timeB - timeA
+  })
+})
 
 onMounted(async () => {
   await refreshData()
@@ -597,7 +1004,7 @@ async function refreshData(): Promise<void> {
     await queueStore.fetchQueueStatus()
     await queueStore.fetchJitterStatus()
     await queueStore.fetchWakeupStatus()
-    await queueStore.fetchTasks()
+    await queueStore.fetchTasks({ orderBy: 'desc' })
     await settingsStore.fetchSettings()
   } finally {
     isRefreshing.value = false
@@ -631,9 +1038,54 @@ async function handleResumeAuthPaused(): Promise<void> {
   await queueStore.resumeAuthPaused()
 }
 
-function getTabCount(tabId: string): number {
-  if (tabId === 'all') return queueStore.tasks.length
-  return queueStore.tasks.filter((t) => t.status === tabId).length
+async function handleOpenPermalink(url?: string | null): Promise<void> {
+  if (!url) return
+  await queueStore.openExternalUrl(url)
+}
+
+async function openDiagnosticModal(task: TaskDTO): Promise<void> {
+  diagnosticTask.value = task
+  diagnosticScreenshotUrl.value = null
+  showDiagnosticModal.value = true
+
+  if (task.screenshot_path && window.fbPulseAPI?.app?.getImageDataUrl) {
+    isLoadingDiagnosticScreenshot.value = true
+    try {
+      const res = await window.fbPulseAPI.app.getImageDataUrl(task.screenshot_path)
+      if (res.success && res.data) {
+        diagnosticScreenshotUrl.value = res.data
+      }
+    } catch (err) {
+      console.warn('[QueueView] Không thể tải ảnh chẩn đoán:', err)
+    } finally {
+      isLoadingDiagnosticScreenshot.value = false
+    }
+  }
+}
+
+function closeDiagnosticModal(): void {
+  showDiagnosticModal.value = false
+  diagnosticTask.value = null
+  diagnosticScreenshotUrl.value = null
+  showZoomedScreenshot.value = false
+}
+
+async function handleRetryFromModal(taskId: string): Promise<void> {
+  closeDiagnosticModal()
+  await handleRetryTask(taskId)
+}
+
+function getQueueTabCount(tabId: string): number {
+  if (tabId === 'all') return queueStore.activeQueueTasks.length
+  if (tabId === 'paused') {
+    return queueStore.activeQueueTasks.filter((t) => t.status === 'paused' || t.status === 'auth_paused').length
+  }
+  return queueStore.activeQueueTasks.filter((t) => t.status === tabId).length
+}
+
+function getHistoryTabCount(tabId: string): number {
+  if (tabId === 'all') return queueStore.historyTasks.length
+  return queueStore.historyTasks.filter((t) => t.status === tabId).length
 }
 
 function getStatusLabel(status: string, retryCount = 0): string {
@@ -741,7 +1193,7 @@ function getStatusDotClass(status: string): string {
   }
 }
 
-function formatTime(isoString: string): string {
+function formatTime(isoString?: string | null): string {
   if (!isoString) return '--:--'
   try {
     const d = new Date(isoString)
@@ -751,13 +1203,23 @@ function formatTime(isoString: string): string {
   }
 }
 
-function formatDate(isoString: string): string {
+function formatDate(isoString?: string | null): string {
   if (!isoString) return ''
   try {
     const d = new Date(isoString)
     return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
   } catch {
     return ''
+  }
+}
+
+function formatDateTime(isoString?: string | null): string {
+  if (!isoString) return 'Chưa ghi nhận'
+  try {
+    const d = new Date(isoString)
+    return `${d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} ${d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}`
+  } catch {
+    return isoString
   }
 }
 </script>

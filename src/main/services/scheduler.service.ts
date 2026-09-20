@@ -353,12 +353,22 @@ export class SchedulerService {
       params.push(filter.status)
     }
 
+    if (filter?.statuses && filter.statuses.length > 0) {
+      const placeholders = filter.statuses.map(() => '?').join(',')
+      query += ` AND t.status IN (${placeholders})`
+      params.push(...filter.statuses)
+    }
+
     if (filter?.campaignId) {
       query += ` AND t.campaign_id = ?`
       params.push(filter.campaignId)
     }
 
-    query += ` ORDER BY datetime(t.scheduled_at) ASC, datetime(t.created_at) ASC`
+    if (filter?.orderBy === 'desc') {
+      query += ` ORDER BY datetime(COALESCE(t.executed_at, t.updated_at, t.scheduled_at)) DESC, datetime(t.created_at) DESC`
+    } else {
+      query += ` ORDER BY datetime(t.scheduled_at) ASC, datetime(t.created_at) ASC`
+    }
 
     if (filter?.limit) {
       query += ` LIMIT ?`

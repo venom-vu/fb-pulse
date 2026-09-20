@@ -55,7 +55,8 @@ const api: FBPulseAPI = {
   },
   app: {
     getInfo: () => ipcRenderer.invoke('app:get-info'),
-    getImageDataUrl: (filePath: string) => ipcRenderer.invoke('app:get-image-data-url', filePath)
+    getImageDataUrl: (filePath: string) => ipcRenderer.invoke('app:get-image-data-url', filePath),
+    openExternal: (url: string) => ipcRenderer.invoke('app:open-external', url)
   },
   onSessionRefreshed: (callback: (account: AccountDTO) => void) => {
     const subscription = (_event: IpcRendererEvent, account: AccountDTO): void => callback(account)
