@@ -61,6 +61,40 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   })
 
+  // Image Data URL Handler (phục vụ hiển thị an toàn ảnh chụp màn hình sự cố)
+  ipcMain.handle('app:get-image-data-url', async (_event, filePath: string): Promise<IPCResult<string>> => {
+    try {
+      if (!filePath) {
+        return { success: false, error: { code: 'INVALID_PATH', message: 'Đường dẫn tệp rỗng' } }
+      }
+      const fs = await import('fs/promises')
+      const { existsSync } = await import('fs')
+      const { extname } = await import('path')
+
+      if (!existsSync(filePath)) {
+        return { success: false, error: { code: 'FILE_NOT_FOUND', message: 'Tệp không tồn tại' } }
+      }
+
+      const ext = extname(filePath).toLowerCase().replace('.', '')
+      const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png'
+      const buffer = await fs.readFile(filePath)
+      const base64 = buffer.toString('base64')
+      return {
+        success: true,
+        data: `data:${mime};base64,${base64}`
+      }
+    } catch (err: any) {
+      console.warn('[IPC] Lỗi khi đọc ảnh data URL:', err)
+      return {
+        success: false,
+        error: {
+          code: 'READ_ERROR',
+          message: err?.message || 'Không thể đọc tệp ảnh'
+        }
+      }
+    }
+  })
+
   // Account Handlers
   ipcMain.handle('account:get-profile', async (): Promise<IPCResult<AccountDTO | null>> => {
     try {

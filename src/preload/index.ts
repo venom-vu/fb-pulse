@@ -54,7 +54,8 @@ const api: FBPulseAPI = {
     minimizeToTray: () => ipcRenderer.invoke('window:minimize-to-tray')
   },
   app: {
-    getInfo: () => ipcRenderer.invoke('app:get-info')
+    getInfo: () => ipcRenderer.invoke('app:get-info'),
+    getImageDataUrl: (filePath: string) => ipcRenderer.invoke('app:get-image-data-url', filePath)
   },
   onSessionRefreshed: (callback: (account: AccountDTO) => void) => {
     const subscription = (_event: IpcRendererEvent, account: AccountDTO): void => callback(account)
@@ -63,8 +64,18 @@ const api: FBPulseAPI = {
       ipcRenderer.removeListener('account:session-refreshed', subscription)
     }
   },
-  onEmergencyPause: (callback: (payload: { reason: string; timestamp: string }) => void) => {
-    const subscription = (_event: IpcRendererEvent, payload: { reason: string; timestamp: string }): void => callback(payload)
+  onEmergencyPause: (
+    callback: (payload: {
+      reason: string
+      timestamp: string
+      screenshotPath?: string | null
+      isCheckpoint?: boolean
+    }) => void
+  ) => {
+    const subscription = (
+      _event: IpcRendererEvent,
+      payload: { reason: string; timestamp: string; screenshotPath?: string | null; isCheckpoint?: boolean }
+    ): void => callback(payload)
     ipcRenderer.on('queue:emergency-pause', subscription)
     return () => {
       ipcRenderer.removeListener('queue:emergency-pause', subscription)

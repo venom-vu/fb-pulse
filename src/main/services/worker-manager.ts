@@ -10,6 +10,7 @@ export interface WorkerTaskResult {
   error?: string
   screenshotPath?: string
   newStorageState?: any
+  isCheckpoint?: boolean
 }
 
 export class WorkerManager {

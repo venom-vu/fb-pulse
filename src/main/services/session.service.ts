@@ -1,4 +1,4 @@
-import { BrowserWindow, session, safeStorage } from 'electron'
+import { BrowserWindow, session, safeStorage, shell } from 'electron'
 import { getDatabase } from '../database/connection'
 import type { AccountDTO, IPCResult } from '../../preload/types'
 
@@ -758,7 +758,8 @@ export class SessionService {
    */
   public async triggerEmergencyPause(
     reason: string,
-    targetWindow?: BrowserWindow | null
+    targetWindow?: BrowserWindow | null,
+    screenshotPath?: string
   ): Promise<AccountDTO> {
     const db = getDatabase()
     const nowIso = new Date().toISOString()
@@ -782,6 +783,15 @@ export class SessionService {
       WHERE status = 'scheduled' OR status = 'running'
     `).run()
 
+    // Phát âm thanh cảnh báo ngắn qua Electron shell.beep()
+    try {
+      if (shell && typeof shell.beep === 'function') {
+        shell.beep()
+      }
+    } catch {
+      // Bỏ qua nếu môi trường không hỗ trợ beep
+    }
+
     const row = db.prepare("SELECT * FROM accounts WHERE id = 'primary_account'").get() as any
     const updatedAccount: AccountDTO = {
       id: row?.id || 'primary_account',
@@ -794,17 +804,20 @@ export class SessionService {
     }
 
     // 3. Phát sự kiện IPC tới Renderer
-    const windows = targetWindow
+    const rawWindows = targetWindow
       ? [targetWindow]
       : BrowserWindow && typeof BrowserWindow.getAllWindows === 'function'
         ? BrowserWindow.getAllWindows()
         : []
+    const windows = Array.isArray(rawWindows) ? rawWindows : []
     for (const win of windows) {
       if (win && typeof win.isDestroyed === 'function' && !win.isDestroyed()) {
         win.webContents?.send('account:session-refreshed', updatedAccount)
         win.webContents?.send('queue:emergency-pause', {
           reason,
-          timestamp: nowIso
+          timestamp: nowIso,
+          screenshotPath: screenshotPath || null,
+          isCheckpoint: true
         })
       }
     }

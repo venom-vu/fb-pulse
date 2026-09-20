@@ -193,9 +193,17 @@ export interface FBPulseAPI {
   }
   app: {
     getInfo: () => Promise<AppInfoDTO>
+    getImageDataUrl: (filePath: string) => Promise<IPCResult<string>>
   }
   onSessionRefreshed: (callback: (account: AccountDTO) => void) => () => void
-  onEmergencyPause: (callback: (payload: { reason: string; timestamp: string }) => void) => () => void
+  onEmergencyPause: (
+    callback: (payload: {
+      reason: string
+      timestamp: string
+      screenshotPath?: string | null
+      isCheckpoint?: boolean
+    }) => void
+  ) => () => void
   onQueueTick: (callback: (payload: QueueTickDTO) => void) => () => void
   onTaskUpdated: (callback: (task: TaskDTO) => void) => () => void
   onWakeupRecovery: (callback: (payload: WakeupRecoveryDTO) => void) => () => void

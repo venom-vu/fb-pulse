@@ -1,6 +1,7 @@
 import { BrowserWindow, powerSaveBlocker, Notification } from 'electron'
 import { getDatabase } from '../database/connection'
 import { settingsService } from './settings.service'
+import { sessionService } from './session.service'
 import { workerManager } from './worker-manager'
 import type { QueueTickDTO, TaskDTO, QueueFilterDTO, WakeupRecoveryDTO } from '../../preload/types'
 
@@ -24,6 +25,7 @@ export class SchedulerService {
         errorCode?: string
         error?: string
         screenshotPath?: string
+        isCheckpoint?: boolean
       }>)
     | null = null
   private futureCheckTimer: NodeJS.Timeout | null = null
@@ -57,6 +59,7 @@ export class SchedulerService {
           errorCode?: string
           error?: string
           screenshotPath?: string
+          isCheckpoint?: boolean
         }>)
       | null
   ): void {
@@ -480,6 +483,8 @@ export class SchedulerService {
     let errorMessage: string | undefined
     let screenshotPath: string | undefined
 
+    let isCheckpoint = false
+
     try {
       if (this.taskExecutor) {
         const res = await this.taskExecutor(nextTask)
@@ -489,6 +494,7 @@ export class SchedulerService {
         errorCode = res.errorCode
         errorMessage = res.error
         screenshotPath = res.screenshotPath
+        isCheckpoint = !!res.isCheckpoint || errorCode === 'CHECKPOINT_DETECTED'
       } else {
         // Thực thi qua Electron utilityProcess Worker độc lập (Story 5.1 / AD-1)
         const res = await workerManager.executeTask(nextTask)
@@ -498,12 +504,64 @@ export class SchedulerService {
         errorCode = res.errorCode
         errorMessage = res.error
         screenshotPath = res.screenshotPath
+        isCheckpoint = !!res.isCheckpoint || errorCode === 'CHECKPOINT_DETECTED'
       }
     } catch (err: any) {
       success = false
       taskStatus = 'failed'
       errorMessage = err?.message || 'Lỗi thực thi tác vụ'
       errorCode = 'EXECUTION_ERROR'
+    }
+
+    if (isCheckpoint || errorCode === 'CHECKPOINT_DETECTED') {
+      // 0. Phát hiện Checkpoint hoặc chặn tính năng: Kích hoạt ngắt khẩn cấp ngay lập tức (Story 5.3)
+      console.warn(`[SchedulerService] Phát hiện Checkpoint/chặn tính năng ở tác vụ ${nextTask.id}! Kích hoạt Emergency Pause.`)
+
+      db.prepare(`
+        UPDATE scheduled_tasks
+        SET status = 'failed',
+            error_code = 'CHECKPOINT_DETECTED',
+            error_message = ?,
+            screenshot_path = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run('[Failed - Checkpoint Detected]', screenshotPath || null, nextTask.id)
+
+      const failedTask = this.getTaskById(nextTask.id)
+      if (failedTask) {
+        this.broadcastTaskUpdated(failedTask)
+      }
+
+      this.currentTaskId = null
+      this.isProcessing = false
+      this.pauseQueue()
+      this.status = 'paused'
+      this.broadcastTick()
+
+      // Kích hoạt Emergency Pause qua SessionService (chuyển các bài còn lại sang paused [Paused - Auth Required] và phát IPC)
+      try {
+        await sessionService.triggerEmergencyPause(
+          errorMessage || 'Facebook yêu cầu xác minh bảo mật (Checkpoint)',
+          this.mainWindow,
+          screenshotPath
+        )
+      } catch (pauseErr) {
+        console.error('[SchedulerService] Lỗi khi kích hoạt triggerEmergencyPause:', pauseErr)
+      }
+
+      // Gửi Native Desktop Notification khẩn cấp
+      try {
+        if (typeof Notification !== 'undefined' && Notification.isSupported()) {
+          new Notification({
+            title: 'fb-pulse: CẢNH BÁO CHECKPOINT KHẨN CẤP',
+            body: 'Facebook yêu cầu xác minh bảo mật (Checkpoint). Toàn bộ hàng đợi đã được dừng khẩn cấp để bảo vệ tài khoản!'
+          }).show()
+        }
+      } catch (notifErr) {
+        console.warn('[SchedulerService] Không thể gửi Desktop Notification:', notifErr)
+      }
+
+      return
     }
 
     if (taskStatus === 'admin_pending') {

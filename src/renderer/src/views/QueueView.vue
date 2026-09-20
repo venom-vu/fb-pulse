@@ -218,10 +218,10 @@
       </div>
     </div>
 
-    <!-- Emergency Pause Warning Box (Story 1.4) -->
+    <!-- Emergency Pause Warning Box (Story 1.4 & Story 5.3) -->
     <div
       v-if="queueStore.isEmergencyPaused || queueStore.authPausedCount > 0"
-      class="bg-[#131B26] border-2 border-[#EF4444] rounded-xl p-5 shadow-[0_0_25px_rgba(239,68,68,0.2)] space-y-4 animate-fade-in"
+      class="bg-[#131B26] border-4 border-double border-[#EF4444] rounded-xl p-5 shadow-[0_0_25px_rgba(239,68,68,0.25)] space-y-4 animate-fade-in"
       role="alert"
       aria-live="polite"
     >
@@ -271,6 +271,35 @@
               <span>{{ accountStore.isLoggingIn ? 'Đang mở WebView...' : 'Mở WebView xử lý ngay' }}</span>
             </button>
           </template>
+        </div>
+      </div>
+
+      <!-- Ảnh chụp màn hình sự cố Checkpoint minh chứng (Story 5.3) -->
+      <div v-if="screenshotDataUrl" class="mt-2 pt-3 border-t border-[#EF4444]/20 flex items-center justify-between">
+        <div class="flex items-center space-x-3.5">
+          <div
+            class="relative group cursor-pointer shrink-0 rounded-lg overflow-hidden border border-[#EF4444]/40 hover:border-[#EF4444] transition-all shadow-sm"
+            title="Nhấp để xem ảnh chụp màn hình kích thước lớn"
+            @click="showScreenshotModal = true"
+          >
+            <img
+              :src="screenshotDataUrl"
+              alt="Ảnh chụp màn hình Checkpoint"
+              class="w-24 h-16 object-cover group-hover:scale-105 transition-transform"
+            />
+            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+              <Maximize2 class="w-4 h-4 text-white" />
+            </div>
+          </div>
+          <div>
+            <div class="flex items-center space-x-1.5 text-xs font-semibold text-[#F1F5F9]">
+              <Camera class="w-3.5 h-3.5 text-[#EF4444]" />
+              <span>Ảnh chụp màn hình sự cố Playwright</span>
+            </div>
+            <p class="text-[11px] text-[#94A3B8] mt-0.5 leading-relaxed">
+              Bằng chứng xác thực tại thời điểm phát hiện Checkpoint. Bấm vào ảnh để xem chi tiết chẩn đoán lỗi.
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -462,11 +491,41 @@
         </table>
       </div>
     </div>
+
+    <!-- Modal Xem Chi Tiết Ảnh Chụp Màn Hình Sự Cố (Story 5.3) -->
+    <div
+      v-if="showScreenshotModal && screenshotDataUrl"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-6 animate-fade-in"
+      @click.self="showScreenshotModal = false"
+    >
+      <div class="bg-[#131B26] border border-[#1E293B] rounded-xl max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+        <div class="px-4 py-3 border-b border-[#1E293B] flex items-center justify-between bg-[#0B111A]">
+          <div class="flex items-center space-x-2">
+            <Camera class="w-4 h-4 text-[#EF4444]" />
+            <span class="text-sm font-semibold text-[#F1F5F9]">Bằng chứng sự cố Facebook Checkpoint</span>
+          </div>
+          <button
+            class="text-[#94A3B8] hover:text-white transition-colors cursor-pointer"
+            title="Đóng"
+            @click="showScreenshotModal = false"
+          >
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+        <div class="p-4 overflow-auto flex items-center justify-center bg-[#0B111A]/50">
+          <img
+            :src="screenshotDataUrl"
+            alt="Chi tiết ảnh chụp màn hình sự cố"
+            class="max-w-full max-h-[75vh] rounded-lg border border-[#1E293B] object-contain shadow-lg"
+          />
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import {
   Play,
   Pause,
@@ -475,7 +534,10 @@ import {
   Clock,
   AlertTriangle,
   ExternalLink,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Camera,
+  Maximize2,
+  X
 } from 'lucide-vue-next'
 import { useAccountStore } from '../stores/account'
 import { useQueueStore } from '../stores/queue'
@@ -485,6 +547,35 @@ const accountStore = useAccountStore()
 const queueStore = useQueueStore()
 const settingsStore = useSettingsStore()
 const isRefreshing = ref(false)
+const showScreenshotModal = ref(false)
+const screenshotDataUrl = ref<string | null>(null)
+
+const emergencyScreenshotPath = computed(() => {
+  if (queueStore.emergencyPauseScreenshot) return queueStore.emergencyPauseScreenshot
+  const checkpointTask = queueStore.tasks.find(
+    (t) => t.error_code === 'CHECKPOINT_DETECTED' && t.screenshot_path
+  )
+  return checkpointTask?.screenshot_path || null
+})
+
+watch(
+  emergencyScreenshotPath,
+  async (newPath) => {
+    if (newPath && window.fbPulseAPI?.app?.getImageDataUrl) {
+      try {
+        const res = await window.fbPulseAPI.app.getImageDataUrl(newPath)
+        if (res.success && res.data) {
+          screenshotDataUrl.value = res.data
+          return
+        }
+      } catch (err) {
+        console.warn('[QueueView] Lỗi khi tải ảnh data URL:', err)
+      }
+    }
+    screenshotDataUrl.value = null
+  },
+  { immediate: true }
+)
 
 const filterTabs = [
   { id: 'all', label: 'Tất cả' },

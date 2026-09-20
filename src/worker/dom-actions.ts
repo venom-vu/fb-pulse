@@ -231,3 +231,88 @@ export async function extractPostPermalink(page: Page, targetId?: string): Promi
   }
 }
 
+export interface CheckpointDetectionResult {
+  isCheckpoint: boolean
+  reason?: string
+}
+
+/**
+ * Kiểm tra xem Facebook có chuyển hướng sang Checkpoint hoặc hiển thị popup chặn tính năng hay không
+ */
+export async function detectCheckpointOrBlock(page: Page): Promise<CheckpointDetectionResult> {
+  try {
+    const currentUrl = page.url().toLowerCase()
+    if (
+      currentUrl.includes('/checkpoint') ||
+      currentUrl.includes('/recover') ||
+      currentUrl.includes('checkpoint_type')
+    ) {
+      return {
+        isCheckpoint: true,
+        reason: 'URL chuyển hướng sang trang checkpoint xác minh tài khoản Facebook'
+      }
+    }
+
+    const blockKeywords = [
+      'bạn tạm thời bị chặn',
+      'chặn tính năng',
+      'tài khoản của bạn đã bị khóa',
+      'xác minh danh tính',
+      'bảo vệ tài khoản',
+      'temporarily blocked',
+      'action blocked',
+      'feature unavailable',
+      'account restricted',
+      'confirm your identity',
+      'we suspended your account',
+      'unusual activity'
+    ]
+
+    const alertSelectors = [
+      'div[role="alert"]',
+      'div[role="dialog"]',
+      'div[aria-modal="true"]',
+      'div[aria-live="assertive"]'
+    ]
+
+    for (const sel of alertSelectors) {
+      try {
+        const loc = page.locator(sel)
+        const count = await loc.count()
+        for (let i = 0; i < count; i++) {
+          const text = (await loc.nth(i).textContent())?.toLowerCase() || ''
+          for (const kw of blockKeywords) {
+            if (text.includes(kw)) {
+              return {
+                isCheckpoint: true,
+                reason: `Phát hiện thông báo chặn tính năng hoặc xác minh danh tính: "${kw}"`
+              }
+            }
+          }
+        }
+      } catch {
+        // Bỏ qua lỗi DOM
+      }
+    }
+
+    // Fallback: Tìm các phần tử text hiển thị trực tiếp
+    for (const kw of blockKeywords) {
+      try {
+        const match = page.locator(`text="${kw}"`).first()
+        if (await match.isVisible()) {
+          return {
+            isCheckpoint: true,
+            reason: `Phát hiện thông báo chặn tính năng hoặc xác minh danh tính: "${kw}"`
+          }
+        }
+      } catch {
+        // Bỏ qua
+      }
+    }
+  } catch (err) {
+    console.warn('[Worker:dom-actions] Lỗi khi kiểm tra checkpoint:', err)
+  }
+
+  return { isCheckpoint: false }
+}
+

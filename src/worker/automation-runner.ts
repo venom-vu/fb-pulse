@@ -8,7 +8,8 @@ import {
   clickPostButton,
   humanDelay,
   checkAdminApprovalPending,
-  extractPostPermalink
+  extractPostPermalink,
+  detectCheckpointOrBlock
 } from './dom-actions'
 
 export interface AutomationTaskPayload {
@@ -29,6 +30,7 @@ export interface AutomationResult {
   error?: string
   screenshotPath?: string
   newStorageState?: any
+  isCheckpoint?: boolean
 }
 
 export class AutomationRunner {
@@ -40,6 +42,17 @@ export class AutomationRunner {
    */
   classifyErrorCode(errorMessage: string): string {
     const msg = errorMessage.toLowerCase()
+    if (
+      msg.includes('checkpoint') ||
+      msg.includes('chặn tính năng') ||
+      msg.includes('bị chặn') ||
+      msg.includes('action blocked') ||
+      msg.includes('tài khoản của bạn đã bị khóa') ||
+      msg.includes('temporarily blocked') ||
+      msg.includes('xác minh danh tính')
+    ) {
+      return 'CHECKPOINT_DETECTED'
+    }
     if (
       msg.includes('network') ||
       msg.includes('err_internet_disconnected') ||
@@ -62,13 +75,17 @@ export class AutomationRunner {
   /**
    * Chụp ảnh màn hình khi xảy ra lỗi sự cố
    */
-  async captureErrorScreenshot(page: Page | null, task: AutomationTaskPayload): Promise<string | undefined> {
+  async captureErrorScreenshot(
+    page: Page | null,
+    task: AutomationTaskPayload,
+    prefix = 'error'
+  ): Promise<string | undefined> {
     if (!page || !task.screenshotDir) return undefined
     try {
       if (!existsSync(task.screenshotDir)) {
         mkdirSync(task.screenshotDir, { recursive: true })
       }
-      const screenshotPath = join(task.screenshotDir, `error-${task.id}-${Date.now()}.png`)
+      const screenshotPath = join(task.screenshotDir, `${prefix}-${task.id}-${Date.now()}.png`)
       await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {})
       return screenshotPath
     } catch (err) {
@@ -155,8 +172,36 @@ export class AutomationRunner {
       console.log(`[Worker:AutomationRunner] Điều hướng tới ${targetUrl}`)
       await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
 
+      // 1.1 Kiểm tra Checkpoint hoặc chặn tính năng ngay sau khi mở trang
+      const initialCheckpoint = await detectCheckpointOrBlock(page)
+      if (initialCheckpoint.isCheckpoint) {
+        console.warn('[Worker:AutomationRunner] Phát hiện Checkpoint hoặc chặn tính năng:', initialCheckpoint.reason)
+        const screenshotPath = await this.captureErrorScreenshot(page, task, 'checkpoint')
+        return {
+          success: false,
+          status: 'failed',
+          errorCode: 'CHECKPOINT_DETECTED',
+          error: initialCheckpoint.reason || 'Facebook yêu cầu xác minh danh tính (Checkpoint)',
+          screenshotPath,
+          isCheckpoint: true
+        }
+      }
+
       // 2. Kiểm tra tính hợp lệ của phiên làm việc
       const currentUrl = page.url()
+      if (currentUrl.includes('/checkpoint') || currentUrl.includes('/recover')) {
+        console.warn('[Worker:AutomationRunner] URL chuyển hướng sang checkpoint:', currentUrl)
+        const screenshotPath = await this.captureErrorScreenshot(page, task, 'checkpoint')
+        return {
+          success: false,
+          status: 'failed',
+          errorCode: 'CHECKPOINT_DETECTED',
+          error: 'Facebook yêu cầu xác minh bảo mật (Checkpoint)',
+          screenshotPath,
+          isCheckpoint: true
+        }
+      }
+
       if (currentUrl.includes('/login') || currentUrl.includes('/two_step_verification')) {
         return {
           success: false,
@@ -276,6 +321,21 @@ export class AutomationRunner {
 
       await humanDelay(2000, 3000)
 
+      // 9.1 Kiểm tra xem Facebook có hiển thị popup chặn tính năng hoặc chuyển hướng checkpoint không
+      const postCheckpoint = await detectCheckpointOrBlock(page)
+      if (postCheckpoint.isCheckpoint) {
+        console.warn('[Worker:AutomationRunner] Phát hiện Checkpoint sau khi bấm Đăng:', postCheckpoint.reason)
+        const screenshotPath = await this.captureErrorScreenshot(page, task, 'checkpoint')
+        return {
+          success: false,
+          status: 'failed',
+          errorCode: 'CHECKPOINT_DETECTED',
+          error: postCheckpoint.reason || 'Facebook chặn tính năng hoặc yêu cầu xác minh bảo mật',
+          screenshotPath,
+          isCheckpoint: true
+        }
+      }
+
       // 10. Kiểm tra xem bài viết có ở trạng thái chờ Admin duyệt không
       const isAdminPending = await checkAdminApprovalPending(page)
       const newStorageState = await this.context.storageState().catch(() => undefined)
@@ -303,14 +363,16 @@ export class AutomationRunner {
       console.error('[Worker:AutomationRunner] Lỗi thực thi tác vụ:', err)
       const errorMessage = err?.message || 'Lỗi không xác định khi thực thi tự động hóa'
       const errorCode = this.classifyErrorCode(errorMessage)
-      const screenshotPath = await this.captureErrorScreenshot(page, task)
+      const prefix = errorCode === 'CHECKPOINT_DETECTED' ? 'checkpoint' : 'error'
+      const screenshotPath = await this.captureErrorScreenshot(page, task, prefix)
 
       return {
         success: false,
         status: 'failed',
         errorCode,
         error: errorMessage,
-        screenshotPath
+        screenshotPath,
+        isCheckpoint: errorCode === 'CHECKPOINT_DETECTED'
       }
     } finally {
       await this.cleanup()

@@ -6,6 +6,7 @@ export const useQueueStore = defineStore('queue', () => {
   const isEmergencyPaused = ref<boolean>(false)
   const emergencyPauseReason = ref<string | null>(null)
   const emergencyPauseTimestamp = ref<string | null>(null)
+  const emergencyPauseScreenshot = ref<string | null>(null)
   const authPausedCount = ref<number>(0)
   const scheduledCount = ref<number>(0)
   const totalCount = ref<number>(0)
@@ -217,10 +218,37 @@ export const useQueueStore = defineStore('queue', () => {
     }
   }
 
-  function handleEmergencyPauseEvent(payload: { reason: string; timestamp: string }): void {
+  function playAlertBeep(): void {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+      if (!AudioContextClass) return
+      const audioCtx = new AudioContextClass()
+      const osc = audioCtx.createOscillator()
+      const gain = audioCtx.createGain()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime)
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5)
+      osc.connect(gain)
+      gain.connect(audioCtx.destination)
+      osc.start()
+      osc.stop(audioCtx.currentTime + 0.5)
+    } catch (err) {
+      console.warn('[QueueStore] Không thể phát âm thanh cảnh báo:', err)
+    }
+  }
+
+  function handleEmergencyPauseEvent(payload: {
+    reason: string
+    timestamp: string
+    screenshotPath?: string | null
+    isCheckpoint?: boolean
+  }): void {
     isEmergencyPaused.value = true
     emergencyPauseReason.value = payload.reason
     emergencyPauseTimestamp.value = payload.timestamp
+    emergencyPauseScreenshot.value = payload.screenshotPath || null
+    playAlertBeep()
     showSecurityModal.value = true
     fetchQueueStatus()
     fetchTasks()
@@ -296,6 +324,7 @@ export const useQueueStore = defineStore('queue', () => {
     isEmergencyPaused,
     emergencyPauseReason,
     emergencyPauseTimestamp,
+    emergencyPauseScreenshot,
     authPausedCount,
     scheduledCount,
     totalCount,
@@ -325,6 +354,7 @@ export const useQueueStore = defineStore('queue', () => {
     cancelCampaign,
     retryTask,
     handleEmergencyPauseEvent,
+    playAlertBeep,
     openSecurityModal,
     closeSecurityModal,
     initListeners
