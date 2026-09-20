@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, nativeImage, Tray } from 'electron'
+import { schedulerService } from './scheduler.service'
 
 // 16x16 PNG Base64 Icon (Màu xanh Emerald đặc trưng của FB-Pulse)
 const TRAY_ICON_DATA_URL =
@@ -7,12 +8,26 @@ const TRAY_ICON_DATA_URL =
 export class TrayService {
   private tray: Tray | null = null
   private mainWindow: BrowserWindow | null = null
+  private isQuitting = false
+
+  getIsQuitting(): boolean {
+    return this.isQuitting
+  }
+
+  setIsQuitting(val: boolean): void {
+    this.isQuitting = val
+  }
+
+  getTray(): Tray | null {
+    return this.tray
+  }
 
   /**
    * Khởi tạo System Tray và gắn kết với cửa sổ chính
    */
   initialize(mainWindow: BrowserWindow): void {
     this.mainWindow = mainWindow
+    this.isQuitting = false
 
     // Tránh khởi tạo nhiều lần
     if (this.tray) {
@@ -22,23 +37,9 @@ export class TrayService {
     try {
       const icon = nativeImage.createFromDataURL(TRAY_ICON_DATA_URL)
       this.tray = new Tray(icon)
-      this.tray.setToolTip('FB-Pulse - Facebook Campaign Automation')
+      this.tray.setToolTip('fb-pulse - Facebook Campaign Automation')
 
-      const contextMenu = Menu.buildFromTemplate([
-        {
-          label: 'Hiển thị FB-Pulse',
-          click: (): void => this.showWindow()
-        },
-        { type: 'separator' },
-        {
-          label: 'Thoát FB-Pulse',
-          click: (): void => {
-            app.quit()
-          }
-        }
-      ])
-
-      this.tray.setContextMenu(contextMenu)
+      this.updateContextMenu()
 
       // Xử lý click trực tiếp vào icon khay hệ thống
       this.tray.on('click', () => {
@@ -55,11 +56,60 @@ export class TrayService {
         }
       })
 
+      // Double-click vào icon khay hệ thống: khôi phục vị trí và kích thước làm việc
       this.tray.on('double-click', () => {
         this.showWindow()
       })
     } catch (err) {
       console.error('[TrayService] Không thể khởi tạo System Tray:', err)
+    }
+  }
+
+  /**
+   * Cập nhật Menu ngữ cảnh của System Tray
+   */
+  updateContextMenu(): void {
+    if (!this.tray) return
+
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: 'Mở fb-pulse',
+        click: (): void => this.showWindow()
+      },
+      {
+        label: 'Tạm dừng / Tiếp tục hàng đợi',
+        click: (): void => this.toggleQueue()
+      },
+      { type: 'separator' },
+      {
+        label: 'Thoát hoàn toàn',
+        click: (): void => this.quitApp()
+      }
+    ])
+
+    this.tray.setContextMenu(contextMenu)
+  }
+
+  /**
+   * Chuyển đổi trạng thái hàng đợi (Tạm dừng hoặc Tiếp tục)
+   */
+  toggleQueue(): void {
+    const queueStatus = schedulerService.getStatus().status
+    if (queueStatus === 'paused') {
+      schedulerService.resumeQueue()
+    } else {
+      schedulerService.pauseQueue()
+    }
+    this.updateContextMenu()
+  }
+
+  /**
+   * Thoát ứng dụng hoàn toàn
+   */
+  quitApp(): void {
+    this.isQuitting = true
+    if (app && typeof app.quit === 'function') {
+      app.quit()
     }
   }
 
@@ -82,6 +132,54 @@ export class TrayService {
       }
       this.mainWindow.show()
       this.mainWindow.focus()
+    }
+  }
+
+  /**
+   * Kiểm tra mức tiêu thụ RAM toàn hệ thống khi chạy ngầm
+   */
+  async getMemoryUsage(): Promise<{
+    totalMemoryMB: number
+    mainMemoryMB: number
+    isWithinBudget: boolean
+  }> {
+    let totalMemoryKB = 0
+    let mainMemoryKB = 0
+
+    try {
+      if (typeof process.getProcessMemoryInfo === 'function') {
+        const mem = await process.getProcessMemoryInfo()
+        mainMemoryKB = mem.residentSet || mem.private || 0
+      } else {
+        const mem = process.memoryUsage()
+        mainMemoryKB = Math.round(mem.rss / 1024)
+      }
+    } catch {
+      const mem = process.memoryUsage()
+      mainMemoryKB = Math.round(mem.rss / 1024)
+    }
+
+    try {
+      if (app && typeof app.getAppMetrics === 'function') {
+        const metrics = app.getAppMetrics()
+        totalMemoryKB = metrics.reduce((acc, m) => acc + (m.memory?.workingSetSize || 0), 0)
+      }
+    } catch {}
+
+    if (totalMemoryKB === 0) {
+      totalMemoryKB = mainMemoryKB
+    }
+
+    const totalMemoryMB = Math.round((totalMemoryKB / 1024) * 10) / 10
+    const mainMemoryMB = Math.round((mainMemoryKB / 1024) * 10) / 10
+
+    // Ngân sách RAM: < 150MB khi chạy ngầm / idle (mục tiêu ~80MB)
+    const isWithinBudget = totalMemoryMB < 150
+
+    return {
+      totalMemoryMB,
+      mainMemoryMB,
+      isWithinBudget
     }
   }
 

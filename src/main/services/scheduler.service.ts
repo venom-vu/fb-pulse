@@ -116,6 +116,13 @@ export class SchedulerService {
   }
 
   /**
+   * Lấy trạng thái hiện tại của máy trạng thái hàng đợi
+   */
+  getStatus(): QueueTickDTO {
+    return this.getJitterStatus()
+  }
+
+  /**
    * Bắt đầu đếm ngược thời gian nghỉ Jitter giữa 2 bài đăng
    */
   startJitter(jitterSeconds: number, onComplete?: () => void): void {

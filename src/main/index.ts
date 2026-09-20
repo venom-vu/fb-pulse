@@ -34,6 +34,14 @@ function createWindow(): void {
     }
   })
 
+  // Chặn sự kiện đóng cửa sổ để thu nhỏ xuống System Tray khi đang chạy ngầm (Story 5.5)
+  mainWindow.on('close', (event) => {
+    if (!trayService.getIsQuitting()) {
+      event.preventDefault()
+      trayService.minimizeToTray()
+    }
+  })
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
@@ -61,8 +69,7 @@ if (!gotTheLock) {
 } else {
   app.on('second-instance', () => {
     if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore()
-      mainWindow.focus()
+      trayService.showWindow()
     }
   })
 
@@ -90,19 +97,22 @@ if (!gotTheLock) {
     schedulerService.updatePowerSaveBlocker()
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
+      if (mainWindow) {
+        trayService.showWindow()
+      } else if (BrowserWindow.getAllWindows().length === 0) {
         createWindow()
       }
     })
   })
 
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
+    if (process.platform !== 'darwin' && trayService.getIsQuitting()) {
       app.quit()
     }
   })
 
   app.on('before-quit', () => {
+    trayService.setIsQuitting(true)
     trayService.destroy()
     sessionService.stopHealthMonitoring()
     schedulerService.resetForTesting()
