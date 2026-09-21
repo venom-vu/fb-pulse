@@ -96,6 +96,9 @@ if (!gotTheLock) {
     // Cập nhật trạng thái PowerSaveBlocker khi khởi động
     schedulerService.updatePowerSaveBlocker()
 
+    // Khởi động vòng lặp kiểm tra và xử lý hàng đợi
+    schedulerService.triggerQueueLoop()
+
     app.on('activate', () => {
       if (mainWindow) {
         trayService.showWindow()

@@ -248,6 +248,8 @@ export class SchedulerService {
         this.broadcastTick()
         this.triggerQueueLoop()
       }
+    } else if (this.status === 'idle') {
+      this.triggerQueueLoop()
     }
 
     this.updatePowerSaveBlocker()
@@ -440,9 +442,10 @@ export class SchedulerService {
     const db = getDatabase()
     const nextTask = db
       .prepare(`
-        SELECT t.*, c.min_jitter_sec, c.max_jitter_sec
+        SELECT t.*, c.min_jitter_sec, c.max_jitter_sec, tg.fb_id, tg.type as target_type, tg.name as target_name
         FROM scheduled_tasks t
         LEFT JOIN campaigns c ON t.campaign_id = c.id
+        LEFT JOIN targets tg ON t.target_id = tg.id
         WHERE (t.status = 'scheduled' OR t.status = 'retrying')
           AND datetime(t.scheduled_at) <= datetime('now')
         ORDER BY datetime(t.scheduled_at) ASC, datetime(t.created_at) ASC

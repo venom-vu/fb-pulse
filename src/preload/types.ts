@@ -197,6 +197,7 @@ export interface FBPulseAPI {
     getInfo: () => Promise<AppInfoDTO>
     getImageDataUrl: (filePath: string) => Promise<IPCResult<string>>
     openExternal: (url: string) => Promise<IPCResult<void>>
+    getPathForFile?: (file: File) => string
   }
   onSessionRefreshed: (callback: (account: AccountDTO) => void) => () => void
   onEmergencyPause: (

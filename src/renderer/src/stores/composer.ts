@@ -263,7 +263,17 @@ export const useComposerStore = defineStore('composer', () => {
         previewUrl = ''
       }
 
-      const filePath = (file as any).path || ''
+      let filePath = ''
+      if (typeof window !== 'undefined' && window?.fbPulseAPI?.app?.getPathForFile) {
+        try {
+          filePath = window.fbPulseAPI.app.getPathForFile(file)
+        } catch (err) {
+          console.warn('[Composer] Lỗi khi lấy đường dẫn file qua getPathForFile:', err)
+        }
+      }
+      if (!filePath) {
+        filePath = (file as any).path || ''
+      }
       const mediaItem: AttachedMedia = {
         id: `media_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         name: file.name,

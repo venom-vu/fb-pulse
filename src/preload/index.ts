@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, IpcRendererEvent, webUtils } from 'electron'
 import type { FBPulseAPI, AccountDTO } from './types'
 
 const api: FBPulseAPI = {
@@ -56,7 +56,17 @@ const api: FBPulseAPI = {
   app: {
     getInfo: () => ipcRenderer.invoke('app:get-info'),
     getImageDataUrl: (filePath: string) => ipcRenderer.invoke('app:get-image-data-url', filePath),
-    openExternal: (url: string) => ipcRenderer.invoke('app:open-external', url)
+    openExternal: (url: string) => ipcRenderer.invoke('app:open-external', url),
+    getPathForFile: (file: File) => {
+      try {
+        if (webUtils && typeof webUtils.getPathForFile === 'function') {
+          return webUtils.getPathForFile(file)
+        }
+      } catch (err) {
+        console.warn('[Preload] webUtils.getPathForFile error:', err)
+      }
+      return (file as any).path || ''
+    }
   },
   onSessionRefreshed: (callback: (account: AccountDTO) => void) => {
     const subscription = (_event: IpcRendererEvent, account: AccountDTO): void => callback(account)

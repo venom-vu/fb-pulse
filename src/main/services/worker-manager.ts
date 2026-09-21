@@ -153,12 +153,23 @@ export class WorkerManager {
     // Lấy storageState đã giải mã từ SQLite để cấp cho Worker
     const storageState = await sessionService.getDecryptedStorageState()
 
+    let mediaPaths: string[] = []
+    if (Array.isArray(task.media_paths)) {
+      mediaPaths = task.media_paths
+    } else if (typeof task.media_paths === 'string') {
+      try {
+        mediaPaths = JSON.parse(task.media_paths)
+      } catch {
+        mediaPaths = []
+      }
+    }
+
     const payload = {
       id: task.id,
-      target_id: task.target_id,
-      target_type: task.target_type,
+      target_id: task.fb_id || task.target_id,
+      target_type: task.target_type || 'group',
       resolved_spintax_text: task.resolved_spintax_text || '',
-      media_paths: Array.isArray(task.media_paths) ? task.media_paths : [],
+      media_paths: mediaPaths,
       storageState,
       screenshotDir: this.getScreenshotDir()
     }

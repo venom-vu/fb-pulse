@@ -730,6 +730,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     async (_event, payload: CreateCampaignDTO): Promise<IPCResult<CreateCampaignResultDTO>> => {
       try {
         const result = campaignService.createCampaign(payload)
+        schedulerService.triggerQueueLoop()
         return { success: true, data: result }
       } catch (error: any) {
         console.error('[IPC] composer:create-campaign error:', error)

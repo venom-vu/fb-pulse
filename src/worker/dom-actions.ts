@@ -30,9 +30,17 @@ export async function humanType(
   const maxDelay = options?.maxDelay ?? 150
 
   if (typeof target === 'string') {
-    await page.click(target)
+    try {
+      await page.click(target, { timeout: 3000 })
+    } catch {
+      await page.click(target, { force: true, timeout: 3000 }).catch(() => {})
+    }
   } else {
-    await target.click()
+    try {
+      await target.click({ timeout: 3000 })
+    } catch {
+      await target.click({ force: true, timeout: 3000 }).catch(() => {})
+    }
   }
 
   await humanDelay(200, 500)
@@ -68,30 +76,37 @@ export async function uploadImages(page: Page, filePaths: string[]): Promise<boo
   const validPaths = filePaths.slice(0, 4)
 
   try {
-    // 1. Tìm nút kích hoạt tải ảnh hoặc input file ẩn
-    const fileInput = page.locator('input[type="file"][accept*="image"]').first()
-    const fileInputCount = await fileInput.count()
+    // 1. Chỉ tìm input file BÊN TRONG modal soạn thảo bài viết div[role="dialog"]
+    // TUYỆT ĐỐI KHÔNG tìm input file ngoài modal (tránh nhầm input upload ảnh bìa / avatar trên trang cá nhân)
+    let fileInput = page.locator('div[role="dialog"] input[type="file"]').first()
+    let hasFileInput = (await fileInput.count()) > 0
 
-    if (fileInputCount > 0) {
-      await fileInput.setInputFiles(validPaths)
-      await humanDelay(1500, 3000) // Chờ Facebook xử lý ảnh
-      return true
+    // 2. Nếu chưa có input file trong modal, bấm vào icon Ảnh/Video trong modal để kích hoạt
+    if (!hasFileInput) {
+      const photoButton = page
+        .locator(
+          'div[role="dialog"] [aria-label*="Ảnh/video"], div[role="dialog"] [aria-label*="Photo/video"], div[role="dialog"] [aria-label*="Ảnh"], div[role="dialog"] div[role="button"]:has-text("Ảnh/video")'
+        )
+        .first()
+
+      if (await photoButton.isVisible()) {
+        try {
+          await photoButton.click({ timeout: 3000 })
+        } catch {
+          await photoButton.click({ force: true, timeout: 3000 }).catch(() => {})
+        }
+        await humanDelay(800, 1500)
+
+        // Chờ input file xuất hiện bên trong modal sau khi bấm nút ảnh
+        fileInput = page.locator('div[role="dialog"] input[type="file"]').first()
+        await fileInput.waitFor({ state: 'attached', timeout: 7000 })
+        hasFileInput = (await fileInput.count()) > 0
+      }
     }
 
-    // 2. Nếu chưa có input file ngay trên DOM, bấm vào icon Ảnh/Video trong popup soạn thảo
-    const photoButton = page.locator(
-      '[aria-label*="Ảnh/video"], [aria-label*="Photo/video"], [aria-label*="Ảnh"], div[role="button"]:has-text("Ảnh/video")'
-    ).first()
-
-    if (await photoButton.isVisible()) {
-      await photoButton.click()
-      await humanDelay(500, 1000)
-
-      // Chờ input file xuất hiện sau khi bấm nút ảnh
-      const fileInputAfterClick = page.locator('input[type="file"][accept*="image"]').first()
-      await fileInputAfterClick.waitFor({ state: 'attached', timeout: 5000 })
-      await fileInputAfterClick.setInputFiles(validPaths)
-      await humanDelay(1500, 3000)
+    if (hasFileInput) {
+      await fileInput.setInputFiles(validPaths)
+      await humanDelay(3000, 5000) // Chờ Facebook xử lý và hiển thị thumbnail ảnh
       return true
     }
 
@@ -110,8 +125,14 @@ export async function clickPostButton(page: Page): Promise<boolean> {
   await naturalScroll(page, 150)
   await humanDelay(1000, 2000)
 
-  // Danh sách các selector phổ biến của nút Đăng / Post trên Facebook Web
+  // Danh sách các selector phổ biến của nút Đăng / Post trên Facebook Web (ưu tiên trong modal trước)
   const postButtonSelectors = [
+    'div[role="dialog"] div[aria-label="Đăng"][role="button"]',
+    'div[role="dialog"] div[aria-label="Post"][role="button"]',
+    'div[role="dialog"] div[role="button"]:has-text("Đăng")',
+    'div[role="dialog"] div[role="button"]:has-text("Post")',
+    'div[role="dialog"] button:has-text("Đăng")',
+    'div[role="dialog"] button:has-text("Post")',
     'div[aria-label="Đăng"][role="button"]',
     'div[aria-label="Post"][role="button"]',
     'div[role="button"]:has-text("Đăng")',
@@ -123,14 +144,42 @@ export async function clickPostButton(page: Page): Promise<boolean> {
   for (const selector of postButtonSelectors) {
     const btn = page.locator(selector).first()
     if (await btn.isVisible()) {
-      // Kiểm tra xem nút có bị disabled không
-      const ariaDisabled = await btn.getAttribute('aria-disabled')
-      if (ariaDisabled === 'true') {
+      // Nếu nút đang bị disabled (ví dụ Facebook đang tải hoặc xử lý ảnh), chờ tối đa 10s cho tới khi sẵn sàng
+      const startTime = Date.now()
+      let isDisabled = (await btn.getAttribute('aria-disabled')) === 'true'
+      while (isDisabled && Date.now() - startTime < 10000) {
+        await humanDelay(500, 1000)
+        isDisabled = (await btn.getAttribute('aria-disabled')) === 'true'
+      }
+
+      if (isDisabled) {
         continue
       }
 
-      await btn.click()
-      return true
+      // Cuộn phần tử vào view nếu cần
+      await btn.scrollIntoViewIfNeeded().catch(() => {})
+
+      // Thử click thông thường trước với timeout ngắn (3000ms)
+      try {
+        await btn.click({ timeout: 3000 })
+        return true
+      } catch (clickErr) {
+        console.warn(
+          '[Worker:dom-actions] Click bình thường bị chặn bởi phần tử khác (intercepted), chuyển sang force click:',
+          clickErr
+        )
+        try {
+          // force: true bỏ qua kiểm tra pointer events intercept của Playwright
+          await btn.click({ force: true, timeout: 3000 })
+          return true
+        } catch (forceErr) {
+          console.warn('[Worker:dom-actions] Force click thất bại, kích hoạt DOM click trực tiếp:', forceErr)
+          await btn.evaluate((el: HTMLElement) => {
+            el.click()
+          })
+          return true
+        }
+      }
     }
   }
 
@@ -193,9 +242,13 @@ export async function checkAdminApprovalPending(page: Page): Promise<boolean> {
 }
 
 /**
- * Trích xuất permalink của bài viết vừa đăng trên trang nhóm
+ * Trích xuất permalink của bài viết vừa đăng trên trang nhóm hoặc trang cá nhân
  */
-export async function extractPostPermalink(page: Page, targetId?: string): Promise<string | null> {
+export async function extractPostPermalink(
+  page: Page,
+  targetId?: string,
+  targetType?: string
+): Promise<string | null> {
   try {
     // 1. Tìm các liên kết bài viết xuất hiện ở phần đầu trang
     const postLinkSelectors = [
@@ -219,7 +272,11 @@ export async function extractPostPermalink(page: Page, targetId?: string): Promi
       }
     }
 
-    // 2. Fallback: Nếu có targetId nhóm, tạo permalink nhóm
+    // 2. Fallback theo loại target
+    if (targetType === 'profile') {
+      return 'https://www.facebook.com/me'
+    }
+
     if (targetId && !targetId.startsWith('http')) {
       return `https://www.facebook.com/groups/${targetId}`
     }

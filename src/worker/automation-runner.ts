@@ -167,6 +167,8 @@ export class AutomationRunner {
       let targetUrl = `https://www.facebook.com/groups/${task.target_id}`
       if (task.target_id.startsWith('http://') || task.target_id.startsWith('https://')) {
         targetUrl = task.target_id
+      } else if (task.target_type === 'profile') {
+        targetUrl = 'https://www.facebook.com/me'
       }
 
       console.log(`[Worker:AutomationRunner] Điều hướng tới ${targetUrl}`)
@@ -219,10 +221,13 @@ export class AutomationRunner {
       const createPostTriggerSelectors = [
         'div[role="button"]:has-text("Bạn viết gì đi...")',
         'div[role="button"]:has-text("Bạn đang nghĩ gì thế?")',
+        'div[role="button"]:has-text("Bạn đang nghĩ gì?")',
         'div[role="button"]:has-text("Write something...")',
+        'div[role="button"]:has-text("What\'s on your mind?")',
         'div[role="button"]:has-text("Tạo bài viết công khai")',
         'div[role="button"]:has-text("Tạo bài viết")',
-        'div[role="region"] div[role="button"]:has-text("viết")'
+        'div[role="region"] div[role="button"]:has-text("viết")',
+        'div[role="region"] div[role="button"]:has-text("nghĩ")'
       ]
 
       let triggerFound = false
@@ -237,7 +242,11 @@ export class AutomationRunner {
 
       if (!triggerFound) {
         // Fallback: Tìm bất kỳ ô nào có role="button" chứa từ khóa liên quan đến đăng bài
-        const fallbackTrigger = page.locator('div[aria-label*="Tạo bài viết"], div[aria-label*="Create post"]').first()
+        const fallbackTrigger = page
+          .locator(
+            'div[aria-label*="Tạo bài viết"], div[aria-label*="Create post"], div[aria-label*="Bạn đang nghĩ gì"], div[aria-label*="What\'s on your mind"]'
+          )
+          .first()
         if (await fallbackTrigger.isVisible()) {
           await fallbackTrigger.click()
           triggerFound = true
@@ -312,11 +321,27 @@ export class AutomationRunner {
         }
       }
 
-      // 9. Chờ bài đăng được xử lý (chờ modal đóng hoặc tối đa 10s)
+      // 9. Chờ bài đăng được xử lý (chờ modal đóng)
+      let modalClosed = false
       try {
-        await page.waitForSelector('div[role="dialog"]', { state: 'detached', timeout: 10000 })
+        await page.waitForSelector('div[role="dialog"]', { state: 'detached', timeout: 15000 })
+        modalClosed = true
       } catch {
-        // Modal có thể tự đóng hoặc ẩn đi
+        // Kiểm tra xem modal có thực sự còn hiển thị trên màn hình không
+        const dialog = page.locator('div[role="dialog"]').first()
+        modalClosed = !(await dialog.isVisible().catch(() => false))
+      }
+
+      if (!modalClosed) {
+        console.warn('[Worker:AutomationRunner] Modal đăng bài chưa đóng sau khi bấm Đăng!')
+        const screenshotPath = await this.captureErrorScreenshot(page, task, 'modal_not_closed')
+        return {
+          success: false,
+          status: 'failed',
+          errorCode: 'POST_SUBMIT_FAILED',
+          error: 'Lỗi đăng bài: Hộp thoại soạn thảo không đóng sau khi bấm Đăng. Có thể ảnh không hợp lệ hoặc thao tác bị Facebook chặn.',
+          screenshotPath
+        }
       }
 
       await humanDelay(2000, 3000)
@@ -350,7 +375,7 @@ export class AutomationRunner {
       }
 
       // 11. Trích xuất permalink bài viết công khai
-      const permalink = await extractPostPermalink(page, task.target_id)
+      const permalink = await extractPostPermalink(page, task.target_id, task.target_type)
       console.log(`[Worker:AutomationRunner] Đăng bài thành công [Success], permalink: ${permalink || 'N/A'}`)
 
       return {

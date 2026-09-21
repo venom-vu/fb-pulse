@@ -37,7 +37,7 @@
 
       <!-- Action Buttons & Quick Stats -->
       <div class="flex flex-wrap items-center gap-3">
-        <!-- Pause / Resume Toggle Button -->
+        <!-- Pause / Resume / Start Toggle Button -->
         <button
           v-if="queueStore.isQueuePaused"
           id="btn-resume-queue"
@@ -47,6 +47,17 @@
         >
           <Play class="w-3.5 h-3.5 fill-current" />
           <span>{{ queueStore.isResumingQueue ? 'Đang kích hoạt...' : 'Tiếp tục hàng đợi (Resume)' }}</span>
+        </button>
+
+        <button
+          v-else-if="queueStore.queueTick.status === 'idle' && queueStore.scheduledCount > 0"
+          id="btn-start-queue"
+          class="px-4 py-2 rounded-lg bg-[#10B981] hover:bg-[#059669] text-[#042419] font-bold text-xs shadow-md transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+          :disabled="queueStore.isResumingQueue"
+          @click="handleStartQueue"
+        >
+          <Play class="w-3.5 h-3.5 fill-current" />
+          <span>{{ queueStore.isResumingQueue ? 'Đang kích hoạt...' : 'Bắt đầu phát hành (Start)' }}</span>
         </button>
 
         <button
@@ -678,6 +689,10 @@ async function handleCancelTask(taskId: string): Promise<void> {
   if (confirm('Bạn có chắc chắn muốn hủy bài đăng này khỏi hàng đợi?')) {
     await queueStore.cancelTask(taskId)
   }
+}
+
+async function handleStartQueue(): Promise<void> {
+  await queueStore.resumeGeneralQueue()
 }
 
 async function handleRetryTask(taskId: string): Promise<void> {
