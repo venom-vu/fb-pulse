@@ -62,7 +62,7 @@
             v-if="index === 0"
             class="absolute top-2 left-2 z-10 px-1.5 py-0.5 rounded bg-[#10B981] text-[#042419] font-bold text-[9px] uppercase tracking-wider shadow-[0_2px_6px_rgba(16,185,129,0.5)] flex items-center space-x-1"
           >
-            <span>★</span>
+            <Star class="w-2.5 h-2.5 fill-current" />
             <span>Ảnh bìa</span>
           </div>
 
@@ -93,7 +93,7 @@
             title="Xóa hình ảnh này"
             @click.stop="composerStore.removeMedia(media.id)"
           >
-            ✕
+            <X class="w-3 h-3" />
           </button>
         </div>
 
@@ -105,9 +105,7 @@
           title="Bấm để chọn ảnh hoặc kéo thả ảnh vào đây"
           @click="openFilePicker"
         >
-          <span class="text-xl font-bold leading-none mb-1 group-hover:scale-110 transition-transform">
-            ＋
-          </span>
+          <ImagePlus class="w-5 h-5 mb-1 group-hover:scale-110 transition-transform" />
           <span class="text-[11px] font-medium leading-tight">Thêm ảnh</span>
           <span class="text-[9px] text-[#64748B] mt-0.5">Kéo thả hoặc click</span>
         </div>
@@ -116,9 +114,10 @@
       <!-- Dragging Overlay Feedback for the whole zone -->
       <div
         v-if="isDraggingOverZone && composerStore.mediaFiles.length < MAX_MEDIA_COUNT"
-        class="mt-2 text-center text-xs text-[#10B981] font-medium animate-pulse"
+        class="mt-2 text-center text-xs text-[#10B981] font-medium flex items-center justify-center space-x-1.5 animate-pulse"
       >
-        📥 Thả hình ảnh vào đây để tải lên...
+        <Upload class="w-3.5 h-3.5" />
+        <span>Thả hình ảnh vào đây để tải lên...</span>
       </div>
     </div>
 
@@ -136,6 +135,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { Star, X, ImagePlus, Upload } from 'lucide-vue-next'
 import { useComposerStore } from '../../stores/composer'
 import { MAX_MEDIA_COUNT } from '../../types/composer'
 

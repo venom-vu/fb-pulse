@@ -8,7 +8,8 @@ const api: FBPulseAPI = {
     importSessionJson: (jsonStr: string) => ipcRenderer.invoke('account:import-session-json', jsonStr),
     logout: () => ipcRenderer.invoke('account:logout'),
     checkHealth: () => ipcRenderer.invoke('account:check-health'),
-    triggerEmergencyPause: (reason?: string) => ipcRenderer.invoke('account:trigger-emergency-pause', reason)
+    triggerEmergencyPause: (reason?: string) => ipcRenderer.invoke('account:trigger-emergency-pause', reason),
+    refreshProfile: () => ipcRenderer.invoke('account:refresh-profile')
   },
   targets: {
     list: () => ipcRenderer.invoke('targets:list'),
@@ -51,6 +52,14 @@ const api: FBPulseAPI = {
     maximize: () => ipcRenderer.invoke('window:maximize'),
     close: () => ipcRenderer.invoke('window:close'),
     isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
+    isFullScreen: () => ipcRenderer.invoke('window:is-fullscreen'),
+    onFullScreenChange: (callback: (isFullScreen: boolean) => void) => {
+      const subscription = (_event: IpcRendererEvent, isFullScreen: boolean): void => callback(isFullScreen)
+      ipcRenderer.on('window:fullscreen-change', subscription)
+      return () => {
+        ipcRenderer.removeListener('window:fullscreen-change', subscription)
+      }
+    },
     minimizeToTray: () => ipcRenderer.invoke('window:minimize-to-tray')
   },
   app: {

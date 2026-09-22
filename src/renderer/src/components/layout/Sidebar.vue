@@ -32,29 +32,33 @@
           <span
             v-if="queueStore.isQueuePaused"
             id="sidebar-jitter-badge"
-            class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#F59E0B]/20 text-[#F59E0B]"
+            class="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#F59E0B]/20 text-[#F59E0B]"
           >
-            ⏸ Paused
+            <Pause class="w-2.5 h-2.5" />
+            <span>Tạm dừng</span>
           </span>
           <span
             v-else-if="queueStore.isQueueRunning"
             id="sidebar-jitter-badge"
-            class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#8B5CF6]/20 text-[#A78BFA] animate-pulse"
+            class="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#8B5CF6]/20 text-[#A78BFA] animate-pulse"
           >
-            ⚡ Running
+            <Play class="w-2.5 h-2.5 fill-current" />
+            <span>Đang chạy</span>
           </span>
           <span
             v-else-if="queueStore.isJitterWaiting"
             id="sidebar-jitter-badge"
-            class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#F59E0B]/20 text-[#F59E0B] animate-pulse"
+            class="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#F59E0B]/20 text-[#F59E0B] animate-pulse"
           >
-            ⏳ Jittering
+            <Clock class="w-2.5 h-2.5" />
+            <span>Nghỉ Jitter</span>
           </span>
           <span
             v-else
-            class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[#10B981]/20 text-[#10B981]"
+            class="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[#10B981]/20 text-[#10B981]"
           >
-            Active
+            <ShieldCheck class="w-2.5 h-2.5" />
+            <span>Sẵn sàng</span>
           </span>
         </div>
 
@@ -63,13 +67,13 @@
           id="sidebar-jitter-countdown"
           class="flex items-center justify-between p-1.5 rounded bg-[#0B111A] border border-[#F59E0B]/30 text-[11px]"
         >
-          <span class="text-[#94A3B8]">{{ queueStore.isQueuePaused ? 'Nghỉ (Tạm dừng):' : 'Nghỉ an toàn:' }}</span>
+          <span class="text-[#94A3B8]">{{ queueStore.isQueuePaused ? 'Nghỉ tạm dừng:' : 'Nghỉ an toàn:' }}</span>
           <span class="font-mono font-bold text-[#F59E0B] text-xs">
             {{ queueStore.queueTick.formattedCountdown }}
           </span>
         </div>
         <p v-else class="text-[10px] text-[#64748B] leading-relaxed">
-          Động cơ Jitter ngẫu nhiên 180s–300s & giới hạn 30 bài/ngày bảo vệ tài khoản.
+          Bảo vệ tài khoản với giãn cách ngẫu nhiên và kiểm soát tần suất tự động.
         </p>
       </div>
 
@@ -90,7 +94,11 @@ import {
   PenSquare,
   ListOrdered,
   Users,
-  Settings
+  Settings,
+  Pause,
+  Play,
+  Clock,
+  ShieldCheck
 } from 'lucide-vue-next'
 import { useNavigationStore, NavTab } from '../../stores/navigation'
 import { useQueueStore } from '../../stores/queue'

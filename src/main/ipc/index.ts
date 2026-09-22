@@ -47,6 +47,24 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return mainWindow.isMaximized()
   })
 
+  ipcMain.handle('window:is-fullscreen', () => {
+    return typeof mainWindow.isFullScreen === 'function' ? mainWindow.isFullScreen() : false
+  })
+
+  if (typeof mainWindow.on === 'function') {
+    mainWindow.on('enter-full-screen', () => {
+      if (!mainWindow.isDestroyed?.() && mainWindow.webContents?.send) {
+        mainWindow.webContents.send('window:fullscreen-change', true)
+      }
+    })
+
+    mainWindow.on('leave-full-screen', () => {
+      if (!mainWindow.isDestroyed?.() && mainWindow.webContents?.send) {
+        mainWindow.webContents.send('window:fullscreen-change', false)
+      }
+    })
+  }
+
   ipcMain.handle('window:minimize-to-tray', () => {
     trayService.minimizeToTray()
   })
@@ -134,17 +152,37 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         return { success: true, data: null }
       }
 
+      const account: AccountDTO = {
+        id: row.id,
+        fb_user_id: row.fb_user_id,
+        name: row.name,
+        avatar_url: row.avatar_url,
+        status: row.status,
+        status_reason: row.status_reason,
+        last_synced_at: row.last_synced_at
+      }
+
+      // Tự động kiểm tra và đồng bộ Tên & Avatar thật nếu chưa có
+      if (
+        row.status === 'connected' &&
+        row.fb_user_id &&
+        (!row.avatar_url || row.name.startsWith('Facebook User ('))
+      ) {
+        sessionService.fetchUserProfile(row.fb_user_id).then(async (profile) => {
+          if (profile.name || profile.avatar_url) {
+            const updated = await sessionService.updateAccountProfile(profile)
+            if (updated && mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('account:session-refreshed', updated)
+            }
+          }
+        }).catch((err) => {
+          console.warn('[IPC] Auto profile refresh failed:', err)
+        })
+      }
+
       return {
         success: true,
-        data: {
-          id: row.id,
-          fb_user_id: row.fb_user_id,
-          name: row.name,
-          avatar_url: row.avatar_url,
-          status: row.status,
-          status_reason: row.status_reason,
-          last_synced_at: row.last_synced_at
-        }
+        data: account
       }
     } catch (error: any) {
       console.error('[IPC] Failed to get account profile:', error)
@@ -164,7 +202,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       try {
         const result = await sessionService.openLoginWindow(mainWindow)
         if (result.success && result.userId) {
-          const accountData: AccountDTO = {
+          let accountData: AccountDTO = {
             id: 'primary_account',
             fb_user_id: result.userId,
             name: `Facebook User (${result.userId})`,
@@ -173,6 +211,17 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
             status_reason: null,
             last_synced_at: new Date().toISOString()
           }
+
+          try {
+            const profile = await sessionService.fetchUserProfile(result.userId)
+            if (profile.name || profile.avatar_url) {
+              const updated = await sessionService.updateAccountProfile(profile)
+              if (updated) accountData = updated
+            }
+          } catch (err) {
+            console.warn('[IPC] Lấy profile sau login thất bại:', err)
+          }
+
           mainWindow.webContents.send('account:session-refreshed', accountData)
         }
         return {
@@ -191,6 +240,24 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       }
     }
   )
+
+  ipcMain.handle('account:refresh-profile', async (): Promise<IPCResult<AccountDTO | null>> => {
+    try {
+      const db = getDatabase()
+      const row = db.prepare('SELECT * FROM accounts WHERE id = ?').get('primary_account') as any
+      if (!row || !row.fb_user_id || row.status !== 'connected') {
+        return { success: true, data: null }
+      }
+      const profile = await sessionService.fetchUserProfile(row.fb_user_id)
+      const updated = await sessionService.updateAccountProfile(profile)
+      if (updated && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('account:session-refreshed', updated)
+      }
+      return { success: true, data: updated }
+    } catch (err: any) {
+      return { success: false, error: { code: 'REFRESH_FAILED', message: err?.message || 'Không thể làm mới profile' } }
+    }
+  })
 
   ipcMain.handle(
     'account:import-session-json',

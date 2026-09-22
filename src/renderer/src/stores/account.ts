@@ -113,6 +113,18 @@ export const useAccountStore = defineStore('account', () => {
     })
   }
 
+  async function refreshProfile(): Promise<void> {
+    if (!window.fbPulseAPI?.account?.refreshProfile) return
+    try {
+      const res = await window.fbPulseAPI.account.refreshProfile()
+      if (res.success && res.data) {
+        account.value = res.data
+      }
+    } catch (err) {
+      console.error('[AccountStore] Error refreshing profile:', err)
+    }
+  }
+
   return {
     account,
     isLoading,
@@ -123,7 +135,8 @@ export const useAccountStore = defineStore('account', () => {
     loginFacebook,
     importSessionJson,
     logout,
-    initListeners
+    initListeners,
+    refreshProfile
   }
 })
 

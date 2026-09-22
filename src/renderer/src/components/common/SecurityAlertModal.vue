@@ -14,14 +14,7 @@
         <div
           class="w-10 h-10 rounded-full bg-[#EF4444]/20 border border-[#EF4444]/50 flex items-center justify-center text-[#EF4444] shrink-0"
         >
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            />
-          </svg>
+          <AlertTriangle class="w-5 h-5" />
         </div>
         <div class="flex-1">
           <div class="flex items-center space-x-2">
@@ -35,20 +28,18 @@
           </h2>
         </div>
         <button
-          class="text-[#94A3B8] hover:text-[#F1F5F9] transition-colors p-1 rounded hover:bg-[#1E293B]"
+          class="text-[#94A3B8] hover:text-[#F1F5F9] transition-colors p-1 rounded hover:bg-[#1E293B] cursor-pointer"
           title="Đóng thông báo"
           @click="closeModal"
         >
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <X class="w-4 h-4" />
         </button>
       </div>
 
       <!-- Description & Reason Box -->
       <div class="space-y-3 text-xs text-[#94A3B8] leading-relaxed">
         <p>
-          Hệ thống phát hiện phiên đăng nhập Facebook của tài khoản đã hết hạn hoặc bị thu hồi (đổi mật khẩu từ thiết bị khác hoặc yêu cầu xác thực Checkpoint).
+          Hệ thống phát hiện phiên đăng nhập Facebook đã hết hạn cookie hoặc yêu cầu xác minh bảo mật (Checkpoint). Toàn bộ hàng đợi đã được tự động tạm dừng an toàn để tránh rủi ro cho tài khoản.
         </p>
 
         <div class="bg-[#0B111A] border border-[#EF4444]/30 rounded-lg p-3 space-y-1.5">
@@ -64,10 +55,8 @@
         <!-- Queue Protection Summary -->
         <div class="bg-[#10B981]/10 border border-[#10B981]/30 rounded-lg p-3 text-[#CBD5E1] flex items-center justify-between">
           <div class="flex items-center space-x-2">
-            <svg class="w-4 h-4 text-[#10B981]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-            <span>Hàng đợi được bảo toàn: <strong class="text-[#10B981]">{{ queueStore.authPausedCount }} bài viết</strong> đang ở trạng thái <code class="text-[11px] text-[#10B981]">[Paused - Auth Required]</code></span>
+            <ShieldCheck class="w-4 h-4 text-[#10B981] shrink-0" />
+            <span>Hàng đợi được bảo toàn: <strong class="text-[#10B981]">{{ queueStore.authPausedCount }} bài viết</strong> đang ở trạng thái <code class="text-[11px] text-[#10B981] bg-[#10B981]/15 px-1 py-0.5 rounded">[Paused - Auth Required]</code></span>
           </div>
         </div>
 
@@ -76,10 +65,8 @@
           v-if="isReauthenticated"
           class="bg-[#10B981]/20 border border-[#10B981]/60 rounded-lg p-3 text-[#10B981] font-medium flex items-center space-x-2 animate-fade-in"
         >
-          <svg class="w-4 h-4 text-[#10B981]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-          </svg>
-          <span>Tái xác thực thành công! Phiên kết nối đã hợp lệ. Bạn có thể bấm Tiếp tục để chạy lại hàng đợi.</span>
+          <CheckCircle2 class="w-4 h-4 text-[#10B981] shrink-0" />
+          <span>Tái xác thực thành công! Phiên kết nối đã hợp lệ. Bấm Tiếp tục để chạy lại hàng đợi.</span>
         </div>
       </div>
 
@@ -121,6 +108,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { AlertTriangle, X, ShieldCheck, CheckCircle2 } from 'lucide-vue-next'
 import { useAccountStore } from '../../stores/account'
 import { useQueueStore } from '../../stores/queue'
 

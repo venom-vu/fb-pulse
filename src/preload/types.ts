@@ -151,6 +151,7 @@ export interface FBPulseAPI {
     logout: () => Promise<IPCResult<void>>
     checkHealth: () => Promise<IPCResult<{ valid: boolean; reason?: string; isCheckpoint?: boolean }>>
     triggerEmergencyPause: (reason?: string) => Promise<IPCResult<AccountDTO>>
+    refreshProfile?: () => Promise<IPCResult<AccountDTO | null>>
   }
   targets: {
     list: () => Promise<IPCResult<TargetDTO[]>>
@@ -191,6 +192,8 @@ export interface FBPulseAPI {
     maximize: () => Promise<void>
     close: () => Promise<void>
     isMaximized: () => Promise<boolean>
+    isFullScreen?: () => Promise<boolean>
+    onFullScreenChange?: (callback: (isFullScreen: boolean) => void) => () => void
     minimizeToTray: () => Promise<void>
   }
   app: {

@@ -304,10 +304,23 @@ export class SessionService {
       }
 
       // Mã hóa phần cứng và lưu vào SQLite
-      const account = await this.saveSessionToDatabase({
+      let account = await this.saveSessionToDatabase({
         fb_user_id: validation.userId,
         cookies: validation.cookies
       })
+
+      // Tự động lấy tên hiển thị và ảnh đại diện thật từ Facebook
+      try {
+        const profile = await this.fetchUserProfile(validation.userId)
+        if (profile.name || profile.avatar_url) {
+          const updated = await this.updateAccountProfile(profile)
+          if (updated) {
+            account = updated
+          }
+        }
+      } catch (profileErr) {
+        console.warn('[SessionService] Lỗi khi tự động lấy profile:', profileErr)
+      }
 
       return {
         success: true,
@@ -322,6 +335,157 @@ export class SessionService {
           message: error?.message || 'Không thể lưu phiên đăng nhập vào cơ sở dữ liệu'
         }
       }
+    }
+  }
+
+  /**
+   * Tự động lấy tên hiển thị và ảnh đại diện thật của tài khoản Facebook.
+   * Kết hợp truy vấn Graph CDN và trích xuất profile từ Facebook.
+   */
+  public async fetchUserProfile(fbUserId: string): Promise<{
+    name: string | null
+    avatar_url: string | null
+  }> {
+    let name: string | null = null
+    let avatarUrl: string | null = null
+
+    // 1. Lấy ảnh đại diện (avatar) qua Graph API redirect hoặc direct url
+    try {
+      const avatarRes = await fetch(`https://graph.facebook.com/${fbUserId}/picture?type=normal`, {
+        method: 'GET',
+        redirect: 'manual'
+      })
+      const loc = avatarRes.headers.get('location')
+      if (loc) {
+        avatarUrl = loc
+      } else {
+        avatarUrl = `https://graph.facebook.com/${fbUserId}/picture?type=normal`
+      }
+    } catch (err) {
+      console.warn('[SessionService] Lấy avatar qua Graph API thất bại:', err)
+      avatarUrl = `https://graph.facebook.com/${fbUserId}/picture?type=normal`
+    }
+
+    // 2. Lấy tên hiển thị tài khoản từ Facebook
+    const fbSession = session && typeof session.fromPartition === 'function'
+      ? session.fromPartition(FB_PARTITION)
+      : null
+
+    // Cách 1: Fetch trang cá nhân với cookies của session
+    if (fbSession && typeof (fbSession as any).fetch === 'function') {
+      try {
+        const profileRes = await (fbSession as any).fetch(`https://www.facebook.com/${fbUserId}`, {
+          method: 'GET',
+          headers: {
+            'User-Agent': fbSession.getUserAgent() || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+          }
+        })
+        if (profileRes.ok) {
+          const html = await profileRes.text()
+          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+          if (titleMatch) {
+            const cleanTitle = titleMatch[1].replace(/\s*\|\s*Facebook/i, '').trim()
+            if (
+              cleanTitle &&
+              !cleanTitle.toLowerCase().includes('facebook') &&
+              !cleanTitle.toLowerCase().includes('đăng nhập') &&
+              !cleanTitle.toLowerCase().includes('log in')
+            ) {
+              name = cleanTitle
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[SessionService] Fetch profile via fbSession failed:', err)
+      }
+    }
+
+    // Cách 2: Public fetch qua https://www.facebook.com/${fbUserId}
+    if (!name) {
+      try {
+        const publicRes = await fetch(`https://www.facebook.com/${fbUserId}`, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
+        })
+        if (publicRes.ok) {
+          const html = await publicRes.text()
+          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+          if (titleMatch) {
+            const cleanTitle = titleMatch[1].replace(/\s*\|\s*Facebook/i, '').trim()
+            if (
+              cleanTitle &&
+              !cleanTitle.toLowerCase().includes('facebook') &&
+              !cleanTitle.toLowerCase().includes('đăng nhập') &&
+              !cleanTitle.toLowerCase().includes('log in')
+            ) {
+              name = cleanTitle
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[SessionService] Public fetch profile failed:', err)
+      }
+    }
+
+    // Cách 3: mbasic.facebook.com
+    if (!name && fbSession && typeof (fbSession as any).fetch === 'function') {
+      try {
+        const mbasicRes = await (fbSession as any).fetch('https://mbasic.facebook.com/profile.php', {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          }
+        })
+        if (mbasicRes.ok) {
+          const html = await mbasicRes.text()
+          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+          if (titleMatch) {
+            const cleanTitle = titleMatch[1].replace(/\s*\|\s*Facebook/i, '').trim()
+            if (
+              cleanTitle &&
+              !cleanTitle.toLowerCase().includes('facebook') &&
+              !cleanTitle.toLowerCase().includes('đăng nhập')
+            ) {
+              name = cleanTitle
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[SessionService] mbasic fetch profile failed:', err)
+      }
+    }
+
+    return { name, avatar_url: avatarUrl }
+  }
+
+  /**
+   * Cập nhật thông tin profile (name, avatar_url) vào SQLite và trả về AccountDTO mới nhất.
+   */
+  public async updateAccountProfile(data: {
+    name?: string | null
+    avatar_url?: string | null
+  }): Promise<AccountDTO | null> {
+    const db = getDatabase()
+    const row = db.prepare("SELECT * FROM accounts WHERE id = 'primary_account'").get() as any
+    if (!row) return null
+
+    const newName = data.name || row.name
+    const newAvatar = data.avatar_url || row.avatar_url
+
+    db.prepare(`
+      UPDATE accounts
+      SET name = ?, avatar_url = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = 'primary_account'
+    `).run(newName, newAvatar)
+
+    return {
+      id: row.id,
+      fb_user_id: row.fb_user_id,
+      name: newName,
+      avatar_url: newAvatar,
+      status: row.status,
+      status_reason: row.status_reason,
+      last_synced_at: row.last_synced_at
     }
   }
 

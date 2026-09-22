@@ -15,7 +15,7 @@
           title="Thử nghiệm ngẫu nhiên một biến thể mới (⌘R hoặc Ctrl+R)"
           @click="handleTestVariant"
         >
-          <span :class="{ 'animate-spin': composerStore.isTestingVariant }">🎲</span>
+          <Dices class="w-3.5 h-3.5" :class="{ 'animate-spin': composerStore.isTestingVariant }" />
           <span>Thử Spintax</span>
           <span class="text-[10px] text-[#10B981]/70 font-mono hidden sm:inline">(⌘R)</span>
         </button>
@@ -53,21 +53,19 @@
         <div class="flex-1 min-w-0">
           <div class="flex items-center space-x-1.5">
             <span class="font-bold text-xs text-[#F1F5F9] truncate">{{ authorName }}</span>
-            <span
+            <CheckCircle2
               v-if="accountStore.account"
-              class="text-[10px] text-[#10B981] font-semibold px-1 rounded bg-[#10B981]/15"
-            >
-              ✓
-            </span>
+              class="w-3 h-3 text-[#10B981]"
+            />
           </div>
-          <div class="text-[11px] text-[#94A3B8] flex items-center space-x-1 truncate mt-0.5">
+          <div class="text-[11px] text-[#94A3B8] flex items-center space-x-1.5 truncate mt-0.5">
             <span>Vừa xong</span>
             <span>·</span>
             <span class="text-[#38BDF8] font-medium truncate" :title="targetDisplayName">
               {{ targetDisplayName }}
             </span>
             <span>·</span>
-            <span class="text-xs" title="Công khai">🌐</span>
+            <Globe class="w-3 h-3 text-[#94A3B8]" title="Công khai" />
           </div>
         </div>
       </div>
@@ -79,7 +77,7 @@
           v-if="composerStore.spintaxError"
           class="p-2.5 rounded bg-[#F59E0B]/10 border border-[#F59E0B]/30 text-[#F59E0B] text-xs flex items-center space-x-2"
         >
-          <span>⚠️</span>
+          <AlertTriangle class="w-3.5 h-3.5 text-[#F59E0B] shrink-0" />
           <span>Cú pháp Spintax chưa hợp lệ. Vui lòng kiểm tra lại khung soạn thảo.</span>
         </div>
 
@@ -196,15 +194,15 @@
       <div class="px-3.5 py-2.5 border-t border-[#2B3A4F]/60 flex items-center justify-between text-xs text-[#94A3B8]">
         <div class="flex items-center space-x-4">
           <div class="flex items-center space-x-1.5 hover:text-[#10B981] transition-colors cursor-default">
-            <span>👍</span>
+            <ThumbsUp class="w-3.5 h-3.5" />
             <span class="font-medium">Thích</span>
           </div>
           <div class="flex items-center space-x-1.5 hover:text-[#10B981] transition-colors cursor-default">
-            <span>💬</span>
+            <MessageSquare class="w-3.5 h-3.5" />
             <span class="font-medium">Bình luận</span>
           </div>
           <div class="flex items-center space-x-1.5 hover:text-[#10B981] transition-colors cursor-default">
-            <span>↗️</span>
+            <Share2 class="w-3.5 h-3.5" />
             <span class="font-medium">Chia sẻ</span>
           </div>
         </div>
@@ -216,6 +214,15 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import {
+  Dices,
+  CheckCircle2,
+  Globe,
+  AlertTriangle,
+  ThumbsUp,
+  MessageSquare,
+  Share2
+} from 'lucide-vue-next'
 import { useAccountStore } from '../../stores/account'
 import { useComposerStore } from '../../stores/composer'
 import { useTargetsStore } from '../../stores/targets'

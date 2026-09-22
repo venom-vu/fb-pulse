@@ -31,7 +31,7 @@
           @change="composerStore.toggleTarget(targetsStore.profileTarget.id)"
         />
         <div class="flex items-center space-x-1.5">
-          <span class="text-sm">👤</span>
+          <User class="w-3.5 h-3.5 text-[#10B981]" />
           <span class="font-semibold text-[#F1F5F9]">
             Đăng lên Trang cá nhân ({{ targetsStore.profileTarget.name }})
           </span>
@@ -72,7 +72,7 @@
             <!-- Empty State -->
             <tr v-else-if="targetsStore.groupTargets.length === 0">
               <td colspan="4" class="text-center py-6 text-xs text-[#64748B]">
-                Chưa có nhóm mục tiêu nào. Vui lòng đồng bộ tại mục Quản lý Target.
+                Chưa có nhóm mục tiêu nào. Vui lòng đồng bộ tại trang Quản lý Đích Đăng.
               </td>
             </tr>
 
@@ -111,7 +111,14 @@
                 </span>
               </td>
               <td class="px-2.5 py-2 text-right text-[11px] text-[#94A3B8]">
-                {{ group.privacy === 'public' ? '🌐 Công khai' : '🔒 Riêng tư' }}
+                <span v-if="group.privacy === 'public'" class="inline-flex items-center space-x-1">
+                  <Globe class="w-3 h-3 text-[#10B981]" />
+                  <span>Công khai</span>
+                </span>
+                <span v-else class="inline-flex items-center space-x-1">
+                  <Lock class="w-3 h-3 text-[#F59E0B]" />
+                  <span>Riêng tư</span>
+                </span>
               </td>
             </tr>
           </tbody>
@@ -144,6 +151,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
+import { User, Globe, Lock } from 'lucide-vue-next'
 import { useTargetsStore } from '../../stores/targets'
 import { useComposerStore } from '../../stores/composer'
 

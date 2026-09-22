@@ -29,7 +29,7 @@
       </div>
 
       <span class="text-[11px] text-[#64748B] hidden md:inline">
-        Lưu trữ toàn bộ kết quả phát hành • Mở bài trực tiếp & chẩn đoán lỗi minh bạch
+        Lịch sử phát hành chi tiết, hỗ trợ mở bài viết và chẩn đoán sự cố.
       </span>
     </div>
 
@@ -92,7 +92,8 @@
                       alt=""
                       class="w-full h-full object-cover"
                     />
-                    <span v-else>{{ task.target_type === 'group' ? '👥' : '👤' }}</span>
+                    <Users v-else-if="task.target_type === 'group'" class="w-3 h-3 text-[#94A3B8]" />
+                    <User v-else class="w-3 h-3 text-[#94A3B8]" />
                   </div>
                   <div class="truncate">
                     <div class="truncate text-xs text-[#F1F5F9] font-medium" :title="task.target_name">
@@ -145,7 +146,7 @@
               <!-- Cột 6: Thao tác -->
               <td class="py-3.5 px-4 text-right whitespace-nowrap">
                 <div class="flex items-center justify-end space-x-1.5">
-                  <!-- Nút Xem bài ↗ (Thành công / có permalink) -->
+                  <!-- Nút Xem bài (Thành công / có permalink) -->
                   <button
                     v-if="(task.status === 'success' || task.status === 'admin_pending') && task.permalink"
                     :id="`btn-view-post-${task.id}`"
@@ -154,7 +155,7 @@
                     @click="$emit('openPermalink', task.permalink)"
                   >
                     <ExternalLink class="w-3 h-3" />
-                    <span>Xem bài ↗</span>
+                    <span>Xem bài</span>
                   </button>
 
                   <!-- Biểu tượng Camera chẩn đoán lỗi (Thất bại) -->
@@ -197,7 +198,9 @@ import {
   ExternalLink,
   Image as ImageIcon,
   Camera,
-  History
+  History,
+  Users,
+  User
 } from 'lucide-vue-next'
 import type { TaskDTO } from '../../../../preload/types'
 

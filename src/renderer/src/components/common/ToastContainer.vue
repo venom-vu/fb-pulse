@@ -17,20 +17,21 @@
         class="pointer-events-auto flex items-start p-3 rounded-lg shadow-xl border backdrop-blur-md transition-all"
         :class="getToastClasses(toast.type)"
       >
-        <span class="mr-2.5 text-sm flex-shrink-0 mt-0.5">
-          <span v-if="toast.type === 'success'" class="text-[#10B981]">✓</span>
-          <span v-else-if="toast.type === 'warning'" class="text-[#F59E0B]">⚠️</span>
-          <span v-else-if="toast.type === 'error'" class="text-[#EF4444]">✕</span>
-          <span v-else class="text-[#38BDF8]">ℹ️</span>
+        <span class="mr-2.5 flex-shrink-0 mt-0.5">
+          <CheckCircle2 v-if="toast.type === 'success'" class="w-4 h-4 text-[#10B981]" />
+          <AlertTriangle v-else-if="toast.type === 'warning'" class="w-4 h-4 text-[#F59E0B]" />
+          <AlertCircle v-else-if="toast.type === 'error'" class="w-4 h-4 text-[#EF4444]" />
+          <Info v-else class="w-4 h-4 text-[#38BDF8]" />
         </span>
         <div class="flex-1 text-xs text-[#F1F5F9] font-medium leading-relaxed select-none">
           {{ toast.message }}
         </div>
         <button
-          class="ml-3 text-[#64748B] hover:text-[#F1F5F9] text-xs transition-colors flex-shrink-0 cursor-pointer"
+          class="ml-3 text-[#64748B] hover:text-[#F1F5F9] p-0.5 transition-colors flex-shrink-0 cursor-pointer"
+          title="Đóng thông báo"
           @click="toastStore.removeToast(toast.id)"
         >
-          ✕
+          <X class="w-3.5 h-3.5" />
         </button>
       </div>
     </transition-group>
@@ -38,6 +39,7 @@
 </template>
 
 <script setup lang="ts">
+import { CheckCircle2, AlertTriangle, AlertCircle, Info, X } from 'lucide-vue-next'
 import { useToastStore, ToastType } from '../../stores/toast'
 
 const toastStore = useToastStore()

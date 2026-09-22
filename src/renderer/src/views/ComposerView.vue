@@ -4,14 +4,15 @@
     <div class="flex items-center justify-between border-b border-[#1E293B] pb-4">
       <div>
         <h1 class="text-xl font-bold text-[#F1F5F9] tracking-tight">Soạn Thảo Chiến Dịch</h1>
-        <p class="text-xs text-[#94A3B8] mt-1">Tạo bài viết với Spintax đa cấp, đính kèm media và lập lịch đăng tự động.</p>
+        <p class="text-xs text-[#94A3B8] mt-1">Soạn bài viết với Spintax, đính kèm media và thiết lập lịch đăng an toàn.</p>
       </div>
       <div class="flex items-center space-x-2">
         <button
           class="px-3 py-2 rounded-md bg-[#131B26] hover:bg-[#1E293B] text-[#94A3B8] hover:text-[#F1F5F9] font-medium text-xs border border-[#1E293B] transition-all flex items-center space-x-1.5 cursor-pointer"
           @click="showImportModal = true"
         >
-          <span>📥 Import Cookie JSON</span>
+          <Upload class="w-3.5 h-3.5 text-[#94A3B8]" />
+          <span>Nhập Cookie JSON</span>
         </button>
         <button
           class="px-4 py-2 rounded-md bg-[#10B981] hover:bg-[#059669] disabled:opacity-60 disabled:cursor-not-allowed text-[#042419] font-bold text-xs shadow-[0_4px_14px_rgba(16,185,129,0.35)] transition-all flex items-center space-x-2 cursor-pointer"
@@ -28,9 +29,11 @@
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
+          <RefreshCw v-else-if="accountStore.account" class="w-3.5 h-3.5 text-[#042419]" />
+          <LogIn v-else class="w-3.5 h-3.5 text-[#042419]" />
           <span v-if="accountStore.isLoggingIn">Đang mở trình duyệt...</span>
-          <span v-else-if="accountStore.account">⚡ Đổi tài khoản Facebook</span>
-          <span v-else>⚡ Kết nối Facebook</span>
+          <span v-else-if="accountStore.account">Đổi tài khoản Facebook</span>
+          <span v-else>Kết nối Facebook</span>
         </button>
       </div>
     </div>
@@ -44,10 +47,11 @@
         <div class="flex items-center justify-between border-b border-[#1E293B] pb-3">
           <h3 class="text-sm font-bold text-[#F1F5F9]">Nhập Cookie / Session JSON Facebook</h3>
           <button
-            class="text-[#64748B] hover:text-[#F1F5F9] text-sm cursor-pointer"
+            class="text-[#64748B] hover:text-[#F1F5F9] p-1 rounded transition-colors cursor-pointer"
+            title="Đóng"
             @click="closeModal"
           >
-            ✕
+            <X class="w-4 h-4" />
           </button>
         </div>
         <p class="text-xs text-[#94A3B8]">
@@ -95,8 +99,8 @@
     >
       <div class="bg-[#131B26] border-2 border-[#F59E0B] rounded-xl max-w-lg w-full p-6 space-y-4 shadow-[0_0_30px_rgba(245,158,11,0.25)]">
         <div class="flex items-start space-x-3.5 border-b border-[#1E293B] pb-4">
-          <div class="w-10 h-10 rounded-full bg-[#F59E0B]/20 border border-[#F59E0B]/50 flex items-center justify-center text-[#F59E0B] text-xl shrink-0">
-            ⚠️
+          <div class="w-10 h-10 rounded-full bg-[#F59E0B]/20 border border-[#F59E0B]/50 flex items-center justify-center text-[#F59E0B] shrink-0">
+            <AlertTriangle class="w-5 h-5 text-[#F59E0B]" />
           </div>
           <div class="flex-1">
             <div class="flex items-center space-x-2">
@@ -193,7 +197,7 @@
               title="Chèn mẫu {lựa chọn 1|lựa chọn 2} tại vị trí con trỏ"
               @click="handleInsertSpintax"
             >
-              <span class="text-[#10B981] font-bold text-sm leading-none">＋</span>
+              <Plus class="w-3.5 h-3.5 text-[#10B981]" />
               <span>Chèn Spintax</span>
             </button>
           </div>
@@ -206,8 +210,8 @@
               title="Thử nghiệm ngẫu nhiên một biến thể mới (Phím tắt: ⌘R hoặc Ctrl+R)"
               @click="handleTestSpintax"
             >
-              <span :class="{ 'animate-spin': composerStore.isTestingVariant }">🎲</span>
-              <span>Thử nghiệm Spintax</span>
+              <Dices class="w-3.5 h-3.5" :class="{ 'animate-spin': composerStore.isTestingVariant }" />
+              <span>Thử biến thể</span>
               <span class="text-[10px] text-[#10B981]/70 font-mono hidden sm:inline">(⌘R)</span>
             </button>
           </div>
@@ -236,9 +240,9 @@
             id="spintax-error-badge"
             class="flex items-center space-x-2 text-xs p-2.5 rounded-lg bg-[#F59E0B]/10 border border-[#F59E0B]/30 text-[#F59E0B] animate-fadeIn"
           >
-            <span class="text-sm">⚠️</span>
+            <AlertTriangle class="w-4 h-4 text-[#F59E0B] shrink-0" />
             <div class="flex-1 font-medium">
-              <span class="font-bold">Cảnh báo cú pháp Spintax:</span> {{ composerStore.spintaxError }}
+              <span class="font-bold">Lỗi cú pháp Spintax:</span> {{ composerStore.spintaxError }}
             </div>
           </div>
 
@@ -278,7 +282,10 @@
                 @change="composerStore.scheduleMode = 'immediate'"
               />
               <div class="flex flex-col">
-                <span class="font-semibold">⚡ Chạy ngay (Immediate)</span>
+                <div class="flex items-center space-x-1.5">
+                  <Zap class="w-3.5 h-3.5 text-[#10B981]" />
+                  <span class="font-semibold">Phát hành ngay</span>
+                </div>
                 <span class="text-[10px] text-[#64748B]">Bắt đầu đưa vào hàng đợi ngay</span>
               </div>
             </label>
@@ -300,7 +307,10 @@
                 @change="composerStore.scheduleMode = 'scheduled'"
               />
               <div class="flex flex-col">
-                <span class="font-semibold">⏰ Hẹn giờ phát hành</span>
+                <div class="flex items-center space-x-1.5">
+                  <CalendarClock class="w-3.5 h-3.5 text-[#38BDF8]" />
+                  <span class="font-semibold">Lên lịch phát hành</span>
+                </div>
                 <span class="text-[10px] text-[#64748B]">Chọn ngày giờ bắt đầu chạy</span>
               </div>
             </label>
@@ -309,7 +319,7 @@
           <!-- Datetime picker if scheduled -->
           <div v-if="composerStore.scheduleMode === 'scheduled'" class="animate-fadeIn space-y-1.5">
             <label class="block text-[11px] font-medium text-[#94A3B8]">
-              Thời gian bắt đầu phát hành (Tương lai):
+              Thời gian bắt đầu phát hành:
             </label>
             <input
               id="schedule-datetime-input"
@@ -324,16 +334,17 @@
           <div class="p-3.5 rounded-lg bg-[#0B111A] border border-[#1E293B] space-y-3">
             <div class="flex items-center justify-between">
               <div class="flex items-center space-x-2">
-                <span class="text-xs font-semibold text-[#F1F5F9]">🛡️ Động Cơ Anti-ban Jitter</span>
+                <ShieldCheck class="w-4 h-4 text-[#10B981]" />
+                <span class="text-xs font-semibold text-[#F1F5F9]">Giãn cách an toàn (Jitter)</span>
                 <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#10B981]/20 text-[#10B981]">
-                  {{ composerStore.minJitterSec }}s – {{ composerStore.maxJitterSec }}s
+                  {{ composerStore.minJitterSec }}s - {{ composerStore.maxJitterSec }}s
                 </span>
               </div>
               <span class="text-[10px] text-[#64748B] font-mono">Tối thiểu 60s</span>
             </div>
 
             <p class="text-[11px] text-[#94A3B8] leading-relaxed">
-              Tự động áp dụng khoảng nghỉ ngẫu nhiên an toàn giữa các bài đăng liên tiếp để bảo vệ tài khoản khỏi thuật toán chống bot của Facebook.
+              Tự động áp dụng khoảng nghỉ ngẫu nhiên giữa các bài đăng để bảo vệ tài khoản an toàn.
             </p>
 
             <div class="grid grid-cols-2 gap-3 pt-1">
@@ -368,7 +379,7 @@
             </div>
           </div>
 
-          <!-- CTA Button: ⚡ Lên lịch chiến dịch -->
+          <!-- CTA Button: Lên lịch chiến dịch -->
           <button
             id="btn-launch-campaign"
             class="w-full py-3 px-4 rounded-xl bg-[#10B981] hover:bg-[#059669] disabled:opacity-50 disabled:cursor-not-allowed text-[#042419] font-bold text-sm shadow-[0_4px_16px_rgba(16,185,129,0.35)] transition-all flex items-center justify-center space-x-2 cursor-pointer active:scale-[0.99]"
@@ -394,8 +405,9 @@
                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
               ></path>
             </svg>
+            <CalendarCheck v-else class="w-4 h-4 mr-1" />
             <span v-if="composerStore.isSubmitting">Đang lưu chiến dịch & phân rã hàng đợi...</span>
-            <span v-else>⚡ Lên lịch chiến dịch (Tự động thu xuống Tray)</span>
+            <span v-else>Lên lịch chiến dịch (Tự động thu xuống Tray)</span>
             <span class="text-[11px] opacity-75 font-mono hidden sm:inline">(⌘Enter)</span>
           </button>
         </div>
@@ -415,6 +427,19 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import {
+  Upload,
+  RefreshCw,
+  LogIn,
+  X,
+  AlertTriangle,
+  Plus,
+  Dices,
+  Zap,
+  CalendarClock,
+  ShieldCheck,
+  CalendarCheck
+} from 'lucide-vue-next'
 import { useAccountStore } from '../stores/account'
 import { useComposerStore } from '../stores/composer'
 import MediaDropzone from '../components/composer/MediaDropzone.vue'

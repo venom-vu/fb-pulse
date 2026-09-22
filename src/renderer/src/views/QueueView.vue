@@ -7,31 +7,35 @@
           <h1 class="text-xl font-bold text-[#F1F5F9] tracking-tight">Hàng Đợi & Lịch Sử</h1>
           <span
             v-if="queueStore.isQueuePaused"
-            class="px-2 py-0.5 rounded text-[11px] font-bold bg-[#F59E0B]/20 text-[#F59E0B] border border-[#F59E0B]/40"
+            class="px-2 py-0.5 rounded text-[11px] font-bold bg-[#F59E0B]/20 text-[#F59E0B] border border-[#F59E0B]/40 inline-flex items-center space-x-1"
           >
-            ⏸ Đang Tạm Dừng
+            <Pause class="w-3 h-3" />
+            <span>Đang Tạm Dừng</span>
           </span>
           <span
             v-else-if="queueStore.isQueueRunning"
-            class="px-2 py-0.5 rounded text-[11px] font-bold bg-[#8B5CF6]/20 text-[#A78BFA] border border-[#8B5CF6]/40 animate-pulse"
+            class="px-2 py-0.5 rounded text-[11px] font-bold bg-[#8B5CF6]/20 text-[#A78BFA] border border-[#8B5CF6]/40 animate-pulse inline-flex items-center space-x-1"
           >
-            ⚡ Đang Thực Thi
+            <Zap class="w-3 h-3" />
+            <span>Đang Thực Thi</span>
           </span>
           <span
             v-else-if="queueStore.isJitterWaiting"
-            class="px-2 py-0.5 rounded text-[11px] font-bold bg-[#F59E0B]/20 text-[#F59E0B] border border-[#F59E0B]/40 animate-pulse"
+            class="px-2 py-0.5 rounded text-[11px] font-bold bg-[#F59E0B]/20 text-[#F59E0B] border border-[#F59E0B]/40 animate-pulse inline-flex items-center space-x-1"
           >
-            ⏳ Nghỉ Jitter
+            <Clock class="w-3 h-3" />
+            <span>Nghỉ Jitter</span>
           </span>
           <span
             v-else
-            class="px-2 py-0.5 rounded text-[11px] font-semibold bg-[#10B981]/20 text-[#10B981] border border-[#10B981]/40"
+            class="px-2 py-0.5 rounded text-[11px] font-semibold bg-[#10B981]/20 text-[#10B981] border border-[#10B981]/40 inline-flex items-center space-x-1"
           >
-            ● Sẵn Sàng
+            <CheckCircle2 class="w-3 h-3 text-[#10B981]" />
+            <span>Sẵn Sàng</span>
           </span>
         </div>
         <p class="text-xs text-[#94A3B8] mt-1">
-          Giám sát tiến độ phát hành, máy trạng thái đơn luồng FIFO và tra cứu lịch sử bài đăng minh bạch.
+          Theo dõi tiến độ phát hành tự động và lịch sử đăng bài.
         </p>
       </div>
 
@@ -165,19 +169,19 @@
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-3">
             <div
-              class="w-9 h-9 rounded-full bg-[#3B82F6]/20 border border-[#3B82F6]/50 text-[#3B82F6] flex items-center justify-center text-lg shrink-0 animate-pulse"
+              class="w-9 h-9 rounded-full bg-[#3B82F6]/20 border border-[#3B82F6]/50 text-[#3B82F6] flex items-center justify-center text-lg shrink-0"
             >
-              🔄
+              <RefreshCw class="w-4 h-4 text-[#3B82F6] animate-spin" />
             </div>
             <div>
               <div class="flex items-center space-x-2">
                 <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#3B82F6] text-white">
                   Khôi Phục Sau Khi Máy Thức Dậy
                 </span>
-                <span class="text-xs text-[#94A3B8]">Bảo vệ an toàn tài khoản — Tránh bắn dồn dập</span>
+                <span class="text-xs text-[#94A3B8]">Bảo vệ an toàn tài khoản, tránh gửi dồn dập</span>
               </div>
               <h3 class="text-sm font-bold text-[#F1F5F9] mt-0.5">
-                Phát hiện {{ queueStore.wakeupRecovery.overdueCount }} bài bị hoãn do máy ngủ — Bắt đầu phát hành an toàn sau {{ queueStore.wakeupRecovery.remainingSeconds }}s
+                Phát hiện {{ queueStore.wakeupRecovery.overdueCount }} bài hoãn do máy ngủ. Bắt đầu phát hành an toàn sau {{ queueStore.wakeupRecovery.remainingSeconds }}s
               </h3>
             </div>
           </div>
@@ -226,7 +230,7 @@
                   : 'bg-[#F59E0B]/20 border border-[#F59E0B]/50 text-[#F59E0B]'
               "
             >
-              ⏳
+              <Hourglass class="w-4 h-4 text-[#F59E0B]" />
             </div>
             <div>
               <div class="flex items-center space-x-2">
@@ -391,7 +395,7 @@
 
         <!-- Action helper -->
         <span class="text-[11px] text-[#64748B] hidden md:inline">
-          Máy trạng thái đơn luồng FIFO • Tự động áp dụng Jitter giữa các bài
+          Xử lý đơn luồng tuần tự, tự động áp dụng khoảng nghỉ an toàn giữa các bài.
         </span>
       </div>
 
@@ -458,7 +462,8 @@
                         alt=""
                         class="w-full h-full object-cover"
                       />
-                      <span v-else>{{ task.target_type === 'group' ? '👥' : '👤' }}</span>
+                      <Users v-else-if="task.target_type === 'group'" class="w-3 h-3 text-[#94A3B8]" />
+                      <User v-else class="w-3 h-3 text-[#94A3B8]" />
                     </div>
                     <div class="truncate">
                       <div class="truncate text-xs text-[#F1F5F9] font-medium">
@@ -591,7 +596,13 @@ import {
   Maximize2,
   X,
   History,
-  ListOrdered
+  ListOrdered,
+  Zap,
+  CheckCircle2,
+  RefreshCw,
+  Hourglass,
+  Users,
+  User
 } from 'lucide-vue-next'
 import QueueHistoryTable from '../components/queue/QueueHistoryTable.vue'
 import DiagnosticModal from '../components/queue/DiagnosticModal.vue'
